@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/HoReCa.Application/HoReCa.Application.csproj" />
+    <Project Path="src/HoReCa.Domain/HoReCa.Domain.csproj" />
+    <Project Path="src/HoReCa.Infrastructure/HoReCa.Infrastructure.csproj" />
+    <Project Path="src/HoReCa.WinForms/HoReCa.WinForms.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/HoReCa.Tests/HoReCa.Tests.csproj" />
+  </Folder>
+</Solution>
