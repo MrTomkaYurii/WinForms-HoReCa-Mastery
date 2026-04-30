@@ -54,6 +54,18 @@ public class MenuItem : BaseEntity
     public string? ImageUrl { get; set; }
 
     public ICollection<OrderItem> OrderItems { get; set; } = new List<OrderItem>();
+    public ICollection<RecipeItem> RecipeItems { get; set; } = new List<RecipeItem>();
+}
+
+public class RecipeItem : BaseEntity
+{
+    public int MenuItemId { get; set; }
+    public MenuItem MenuItem { get; set; } = null!;
+
+    public int InventoryItemId { get; set; }
+    public InventoryItem InventoryItem { get; set; } = null!;
+
+    public decimal QuantityNeeded { get; set; }
 }
 
 public class Order : BaseEntity

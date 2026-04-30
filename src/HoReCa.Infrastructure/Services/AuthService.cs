@@ -120,6 +120,23 @@ public class AuthService : IAuthService
             .ToListAsync(ct);
     }
 
+    public async Task<bool> ChangePinAsync(int userId, string newPin, CancellationToken ct = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        var user = await context.Users.FindAsync(new object[] { userId }, ct);
+        if (user == null || newPin.Length < 4) return false;
+
+        user.PinCode = newPin.Trim();
+        user.UpdatedAt = DateTime.UtcNow;
+        await context.SaveChangesAsync(ct);
+
+        if (CurrentUser != null && CurrentUser.Id == userId)
+        {
+            CurrentUser = MapToDto(user);
+        }
+        return true;
+    }
+
     public void Logout()
     {
         CurrentUser = null;

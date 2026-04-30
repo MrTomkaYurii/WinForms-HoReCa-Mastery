@@ -14,7 +14,12 @@ public class HoReCaDbContext : DbContext
     public DbSet<MenuItem> MenuItems => Set<MenuItem>();
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
+    public DbSet<RecipeItem> RecipeItems => Set<RecipeItem>();
     public DbSet<InventoryItem> Inventory => Set<InventoryItem>();
+    public DbSet<Supplier> Suppliers => Set<Supplier>();
+    public DbSet<PurchaseOrder> PurchaseOrders => Set<PurchaseOrder>();
+    public DbSet<PurchaseOrderItem> PurchaseOrderItems => Set<PurchaseOrderItem>();
+    public DbSet<StaffShift> StaffShifts => Set<StaffShift>();
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<UserAccount> Users => Set<UserAccount>();
 
@@ -173,6 +178,76 @@ public class HoReCaDbContext : DbContext
                 .WithMany(b => b.Payments)
                 .HasForeignKey(p => p.BookingId)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // RecipeItem
+        modelBuilder.Entity<RecipeItem>(b =>
+        {
+            b.HasKey(ri => ri.Id);
+            b.Property(ri => ri.QuantityNeeded).HasPrecision(12, 3);
+
+            b.HasOne(ri => ri.MenuItem)
+                .WithMany(m => m.RecipeItems)
+                .HasForeignKey(ri => ri.MenuItemId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            b.HasOne(ri => ri.InventoryItem)
+                .WithMany()
+                .HasForeignKey(ri => ri.InventoryItemId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Supplier
+        modelBuilder.Entity<Supplier>(b =>
+        {
+            b.HasKey(s => s.Id);
+            b.Property(s => s.Name).HasMaxLength(150).IsRequired();
+            b.Property(s => s.Phone).HasMaxLength(30);
+            b.Property(s => s.Email).HasMaxLength(100);
+        });
+
+        // PurchaseOrder
+        modelBuilder.Entity<PurchaseOrder>(b =>
+        {
+            b.HasKey(po => po.Id);
+            b.Property(po => po.OrderNumber).HasMaxLength(50).IsRequired();
+            b.Property(po => po.TotalAmount).HasPrecision(12, 2);
+
+            b.HasOne(po => po.Supplier)
+                .WithMany(s => s.PurchaseOrders)
+                .HasForeignKey(po => po.SupplierId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // PurchaseOrderItem
+        modelBuilder.Entity<PurchaseOrderItem>(b =>
+        {
+            b.HasKey(poi => poi.Id);
+            b.Property(poi => poi.QuantityOrdered).HasPrecision(12, 3);
+            b.Property(poi => poi.UnitCost).HasPrecision(12, 2);
+
+            b.HasOne(poi => poi.PurchaseOrder)
+                .WithMany(po => po.Items)
+                .HasForeignKey(poi => poi.PurchaseOrderId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            b.HasOne(poi => poi.InventoryItem)
+                .WithMany()
+                .HasForeignKey(poi => poi.InventoryItemId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // StaffShift
+        modelBuilder.Entity<StaffShift>(b =>
+        {
+            b.HasKey(ss => ss.Id);
+            b.Property(ss => ss.TotalSales).HasPrecision(12, 2);
+            b.Property(ss => ss.TipsEarned).HasPrecision(12, 2);
+
+            b.HasOne(ss => ss.User)
+                .WithMany()
+                .HasForeignKey(ss => ss.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

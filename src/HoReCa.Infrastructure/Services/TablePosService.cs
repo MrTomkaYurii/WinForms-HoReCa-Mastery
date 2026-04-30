@@ -142,6 +142,27 @@ public class TablePosService : ITablePosService
 
         order.RecalculateTotals();
 
+        // 1. Deduct recipe ingredients automatically from Warehouse stock
+        var itemIds = request.Items.Select(i => i.MenuItemId).ToList();
+        var recipes = await db.RecipeItems
+            .Include(r => r.InventoryItem)
+            .Where(r => itemIds.Contains(r.MenuItemId))
+            .ToListAsync(ct);
+
+        foreach (var itemReq in request.Items)
+        {
+            var itemRecipes = recipes.Where(r => r.MenuItemId == itemReq.MenuItemId);
+            foreach (var recipe in itemRecipes)
+            {
+                if (recipe.InventoryItem != null)
+                {
+                    decimal deductAmount = recipe.QuantityNeeded * itemReq.Quantity;
+                    recipe.InventoryItem.CurrentStock = Math.Max(0, recipe.InventoryItem.CurrentStock - deductAmount);
+                    recipe.InventoryItem.UpdatedAt = DateTime.UtcNow;
+                }
+            }
+        }
+
         if (request.TableId.HasValue)
         {
             var table = await db.Tables.FindAsync(new object[] { request.TableId.Value }, ct);
@@ -197,6 +218,18 @@ public class TablePosService : ITablePosService
                 Status = PaymentStatus.Completed,
                 TransactionReference = $"TRX-{Guid.NewGuid():N}"[..16]
             });
+
+            // Update active staff shift for waiter
+            var activeShift = await db.StaffShifts
+                .Where(s => s.Status == ShiftStatus.Active && s.User.FullName.Contains(order.WaiterName))
+                .FirstOrDefaultAsync(ct);
+
+            if (activeShift != null)
+            {
+                activeShift.OrdersProcessed++;
+                activeShift.TotalSales += amountPaid;
+                activeShift.UpdatedAt = DateTime.UtcNow;
+            }
 
             await db.SaveChangesAsync(ct);
         }

@@ -55,7 +55,31 @@ public interface IAuthService
     Task<AuthResult> LoginAsync(string usernameOrPin, string? password, CancellationToken ct = default);
     Task<AuthResult> QuickLoginAsync(UserRole role, CancellationToken ct = default);
     Task<AuthResult> RegisterAsync(RegisterUserRequest request, CancellationToken ct = default);
+    Task<bool> ChangePinAsync(int userId, string newPin, CancellationToken ct = default);
     Task<List<UserAccountDto>> GetDemoAccountsAsync(CancellationToken ct = default);
     void Logout();
+}
+
+public interface IPdfReportService
+{
+    Task<string> GenerateReceiptPdfAsync(OrderDto order, string cashierName, CancellationToken ct = default);
+    Task<string> GeneratePurchaseOrderPdfAsync(PurchaseOrderDto po, CancellationToken ct = default);
+    Task<string> GenerateZReportPdfAsync(AnalyticsSummaryDto summary, string cashierName, CancellationToken ct = default);
+}
+
+public interface IStaffMonitoringService
+{
+    Task<StaffDashboardDto> GetStaffDashboardAsync(CancellationToken ct = default);
+    Task<List<StaffShiftDto>> GetActiveShiftsAsync(CancellationToken ct = default);
+    Task<StaffShiftDto> ClockInAsync(int userId, string? station = null, CancellationToken ct = default);
+    Task ClockOutAsync(int shiftId, CancellationToken ct = default);
+}
+
+public interface IProcurementService
+{
+    Task<List<SupplierDto>> GetSuppliersAsync(CancellationToken ct = default);
+    Task<List<PurchaseOrderDto>> GetPurchaseOrdersAsync(CancellationToken ct = default);
+    Task<PurchaseOrderDto> CreatePurchaseOrderAsync(CreatePurchaseOrderRequest req, CancellationToken ct = default);
+    Task ReceivePurchaseOrderAsync(int purchaseOrderId, CancellationToken ct = default);
 }
 

@@ -120,7 +120,8 @@ public class InventoryService : IInventoryService
             i.CurrentStock,
             i.MinimumStock,
             i.CostPerUnit,
-            i.IsLowStock
+            i.IsLowStock,
+            i.SupplierId
         )).ToList();
     }
 
@@ -165,32 +166,105 @@ public class AnalyticsService : IAnalyticsService
 
         // Trends for last 7 days
         var trends = new List<DailyRevenuePointDto>();
+        decimal[] sampleResto = [32400m, 48900m, 44200m, 26800m, 29400m, 31500m, 35800m];
+        decimal[] sampleHotel = [41200m, 46500m, 43800m, 34100m, 36000m, 38200m, 39500m];
         for (int i = 6; i >= 0; i--)
         {
             var day = today.AddDays(-i);
+            int idx = 6 - i;
             trends.Add(new DailyRevenuePointDto(
                 day,
-                RestaurantRevenue: 12500m + (decimal)(Math.Sin(i * 1.5) * 3500 + 1000),
-                HotelRevenue: 18000m + (decimal)(Math.Cos(i * 1.2) * 4000 + 1500)
+                RestaurantRevenue: sampleResto[idx],
+                HotelRevenue: sampleHotel[idx]
             ));
         }
 
         var topDishes = new List<TopSellingItemDto>
         {
-            new("Стейк Рібай з печеними овочами", 42, 28980m),
+            new("Стейк Рібай зернова витримка", 42, 28980m),
             new("Салат Цезар з куркою су-від", 68, 19380m),
             new("Піца 4 Сири на дровах", 55, 18700m),
             new("Філе лосося з пюре з селери", 31, 16740m),
-            new("Паста Карбонара класична", 48, 14160m)
+            new("Паста Карбонара класична", 48, 14160m),
+            new("Бургер Black Angus з картоплею", 39, 12480m),
+            new("Тартар з телятини з трюфелем", 34, 11560m),
+            new("Тірамісу десертний фірмовий", 52, 9880m)
+        };
+
+        // Table Activity & Turnover
+        var tables = await db.Tables.Include(t => t.Zone).OrderBy(t => t.TableNumber).ToListAsync(ct);
+        var tableActivities = new List<TableActivityDto>();
+        var sampleOrdersCount = new[] { 14, 12, 10, 9, 16, 11, 8, 13, 7, 15, 6, 10 };
+        var sampleRevenues = new[] { 18450m, 15200m, 12800m, 11400m, 26500m, 14300m, 9600m, 17900m, 8500m, 21200m, 7400m, 13800m };
+
+        for (int i = 0; i < tables.Count; i++)
+        {
+            var tbl = tables[i];
+            int orders = i < sampleOrdersCount.Length ? sampleOrdersCount[i] : 8;
+            decimal rev = i < sampleRevenues.Length ? sampleRevenues[i] : 9500m;
+            decimal avg = orders > 0 ? Math.Round(rev / orders, 2) : 0m;
+            tableActivities.Add(new TableActivityDto(
+                tbl.TableNumber,
+                tbl.Zone?.Name ?? "Основний зал",
+                tbl.Capacity,
+                orders,
+                rev,
+                avg,
+                tbl.Status.ToString()
+            ));
+        }
+
+        // Waiter Performance & Tips
+        var shifts = await db.StaffShifts.Include(s => s.User)
+            .Where(s => s.RoleAtShift == UserRole.Waiter || s.RoleAtShift == UserRole.Barista)
+            .ToListAsync(ct);
+
+        var waiterStats = new List<WaiterPerformanceDto>();
+        if (shifts.Count > 0)
+        {
+            foreach (var s in shifts)
+            {
+                waiterStats.Add(new WaiterPerformanceDto(
+                    s.UserId,
+                    s.User?.FullName ?? "Персонал",
+                    s.AssignedZoneOrStation ?? "Зал",
+                    ActiveTablesCount: 3,
+                    OrdersServedToday: s.OrdersProcessed,
+                    SalesToday: s.TotalSales,
+                    TipsToday: s.TipsEarned,
+                    IsOnShift: s.Status == ShiftStatus.Active
+                ));
+            }
+        }
+        else
+        {
+            waiterStats.Add(new WaiterPerformanceDto(1, "Максим Іванов", "Основний зал", 3, 14, 18450m, 1850m, true));
+            waiterStats.Add(new WaiterPerformanceDto(2, "Анастасія Петренко", "Основний зал & VIP", 4, 11, 14200m, 1450m, true));
+            waiterStats.Add(new WaiterPerformanceDto(3, "Данило Коваль", "Літня тераса", 2, 8, 9850m, 980m, true));
+            waiterStats.Add(new WaiterPerformanceDto(4, "Назар Бондаренко", "Головний бар", 1, 22, 7600m, 720m, true));
+        }
+
+        // Category Sales Breakdown
+        var categorySales = new List<CategorySalesDto>
+        {
+            new("М'ясні та рибні страви", 145, 68400m, 36.5),
+            new("Піца та випічка на дровах", 120, 38600m, 20.6),
+            new("Салати та холодні закуски", 110, 27800m, 14.8),
+            new("Паста та різотто", 85, 24950m, 13.3),
+            new("Бар та авторські коктейлі", 160, 19450m, 10.4),
+            new("Десерти власного виробництва", 65, 8200m, 4.4)
         };
 
         return new AnalyticsSummaryDto(
-            todayRevenue > 0 ? todayRevenue : 24650m,
-            todayOrdersCount > 0 ? todayOrdersCount : 38,
-            averageCheck,
-            occupancyPercent > 0 ? occupancyPercent : 71.4,
+            todayRevenue > 0 ? todayRevenue : 35800m,
+            todayOrdersCount > 0 ? todayOrdersCount : 42,
+            averageCheck > 0 ? averageCheck : 852m,
+            occupancyPercent > 0 ? occupancyPercent : 78.5,
             trends,
-            topDishes
+            topDishes,
+            tableActivities,
+            waiterStats,
+            categorySales
         );
     }
 }

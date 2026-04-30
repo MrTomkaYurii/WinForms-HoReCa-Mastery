@@ -121,7 +121,8 @@ public record InventoryDto(
     decimal CurrentStock,
     decimal MinimumStock,
     decimal CostPerUnit,
-    bool IsLowStock
+    bool IsLowStock,
+    int? SupplierId = null
 );
 
 public record AnalyticsSummaryDto(
@@ -130,7 +131,10 @@ public record AnalyticsSummaryDto(
     decimal AverageCheck,
     double HotelOccupancyPercent,
     List<DailyRevenuePointDto> RevenueTrends,
-    List<TopSellingItemDto> TopDishes
+    List<TopSellingItemDto> TopDishes,
+    List<TableActivityDto> TableActivities,
+    List<WaiterPerformanceDto> WaiterStats,
+    List<CategorySalesDto> CategorySales
 );
 
 public record DailyRevenuePointDto(
@@ -143,6 +147,23 @@ public record TopSellingItemDto(
     string Name,
     int QuantitySold,
     decimal TotalRevenue
+);
+
+public record TableActivityDto(
+    int TableNumber,
+    string ZoneName,
+    int Capacity,
+    int OrdersCount,
+    decimal TotalRevenue,
+    decimal AverageCheck,
+    string Status
+);
+
+public record CategorySalesDto(
+    string CategoryName,
+    int QuantitySold,
+    decimal TotalRevenue,
+    double SharePercent
 );
 
 public record UserAccountDto(
@@ -171,5 +192,104 @@ public record AuthResult(
     bool Success,
     string? ErrorMessage,
     UserAccountDto? User
+);
+
+public record SupplierDto(
+    int Id,
+    string Name,
+    string ContactPerson,
+    string Phone,
+    string Email,
+    string Address,
+    string Category,
+    string Edrpou
+);
+
+public record PurchaseOrderItemDto(
+    int Id,
+    int InventoryItemId,
+    string ItemName,
+    string SKU,
+    string Unit,
+    decimal QuantityOrdered,
+    decimal UnitCost,
+    decimal LineTotal
+);
+
+public record PurchaseOrderDto(
+    int Id,
+    string OrderNumber,
+    int SupplierId,
+    string SupplierName,
+    DateTime OrderDate,
+    DateTime? ExpectedDeliveryDate,
+    PurchaseOrderStatus Status,
+    decimal TotalAmount,
+    string? Notes,
+    List<PurchaseOrderItemDto> Items
+);
+
+public record CreatePurchaseOrderItemRequest(
+    int InventoryItemId,
+    decimal QuantityOrdered,
+    decimal UnitCost
+);
+
+public record CreatePurchaseOrderRequest(
+    int SupplierId,
+    DateTime? ExpectedDeliveryDate,
+    string? Notes,
+    List<CreatePurchaseOrderItemRequest> Items
+);
+
+public record StaffShiftDto(
+    int Id,
+    int UserId,
+    string FullName,
+    string Username,
+    UserRole Role,
+    DateTime ClockInTime,
+    DateTime? ClockOutTime,
+    int OrdersProcessed,
+    decimal TotalSales,
+    decimal TipsEarned,
+    ShiftStatus Status,
+    string? AssignedStation
+);
+
+public record ChefWorkloadDto(
+    int UserId,
+    string FullName,
+    string Station,
+    int ActiveOrdersCount,
+    int CompletedTodayCount,
+    bool IsOnShift
+);
+
+public record WaiterPerformanceDto(
+    int UserId,
+    string FullName,
+    string AssignedZone,
+    int ActiveTablesCount,
+    int OrdersServedToday,
+    decimal SalesToday,
+    decimal TipsToday,
+    bool IsOnShift
+);
+
+public record StaffDashboardDto(
+    int TotalStaffOnShift,
+    int KitchenCrewCount,
+    int WaitersOnFloorCount,
+    int ActiveOrdersInKitchen,
+    List<ChefWorkloadDto> KitchenStaff,
+    List<WaiterPerformanceDto> Waiters,
+    List<StaffShiftDto> RecentShifts
+);
+
+public record UpdatePinRequest(
+    int UserId,
+    string CurrentPin,
+    string NewPin
 );
 

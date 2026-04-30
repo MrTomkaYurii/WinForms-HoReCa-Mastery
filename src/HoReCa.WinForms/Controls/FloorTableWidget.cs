@@ -25,12 +25,11 @@ public class FloorTableWidget : UserControl
         SetStyle(
             ControlStyles.AllPaintingInWmPaint |
             ControlStyles.UserPaint |
-            ControlStyles.OptimizedDoubleBuffer |
-            ControlStyles.SupportsTransparentBackColor,
+            ControlStyles.OptimizedDoubleBuffer,
             true);
 
         DoubleBuffered = true;
-        BackColor = Color.Transparent;
+        BackColor = ThemePalette.BackgroundDark;
         UpdateFromDto(table);
 
         Cursor = Cursors.Hand;
@@ -103,6 +102,10 @@ public class FloorTableWidget : UserControl
         base.OnPaint(e);
         var g = e.Graphics;
         g.SmoothingMode = SmoothingMode.AntiAlias;
+
+        // Ensure clean dark canvas background
+        using var canvasBrush = new SolidBrush(ThemePalette.BackgroundDark);
+        g.FillRectangle(canvasBrush, ClientRectangle);
 
         var rect = new Rectangle(2, 2, Width - 5, Height - 5);
 

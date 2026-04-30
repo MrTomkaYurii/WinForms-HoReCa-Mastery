@@ -92,7 +92,10 @@ static class Program
                     services.AddScoped<IKitchenService, KitchenService>();
                     services.AddScoped<IInventoryService, InventoryService>();
                     services.AddScoped<IAnalyticsService, AnalyticsService>();
+                    services.AddScoped<IStaffMonitoringService, StaffMonitoringService>();
+                    services.AddScoped<IProcurementService, ProcurementService>();
                     services.AddSingleton<IReceiptPrintService, ReceiptPrinterEngine>();
+                    services.AddSingleton<IPdfReportService, PdfReportService>();
 
                     // Forms
                     services.AddTransient<WelcomeStartForm>();
@@ -102,6 +105,9 @@ static class Program
                     services.AddTransient<HotelFrontDeskForm>();
                     services.AddTransient<KitchenDisplayForm>();
                     services.AddTransient<InventoryForm>();
+                    services.AddTransient<StaffMonitoringForm>();
+                    services.AddTransient<UserProfileDialog>();
+                    services.AddTransient<SupplierOrderDialog>();
                     services.AddTransient<AnalyticsForm>();
                     services.AddTransient<LogsViewerForm>();
                 })

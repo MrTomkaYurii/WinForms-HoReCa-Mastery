@@ -64,6 +64,21 @@ public enum UserRole
     Waiter = 2,
     Receptionist = 3,
     Chef = 4,
-    Storekeeper = 5
+    Storekeeper = 5,
+    Barista = 6
+}
+
+public enum PurchaseOrderStatus
+{
+    Draft = 1,
+    Sent = 2,
+    Delivered = 3,
+    Cancelled = 4
+}
+
+public enum ShiftStatus
+{
+    Active = 1,
+    Completed = 2
 }
 

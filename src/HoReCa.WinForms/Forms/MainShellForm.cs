@@ -27,6 +27,7 @@ public class MainShellForm : BaseForm
     private readonly Button _navHotel;
     private readonly Button _navKds;
     private readonly Button _navInventory;
+    private readonly Button _navStaff;
     private readonly Button _navAnalytics;
     private readonly Button _navLogs;
 
@@ -37,8 +38,9 @@ public class MainShellForm : BaseForm
         _authService = authService;
 
         Text = "LuxeResto HoReCa Suite — Enterprise POS & Hotel Management (.NET 10)";
-        Size = new Size(1300, 800);
-        MinimumSize = new Size(1000, 650);
+        Size = new Size(1440, 900);
+        MinimumSize = new Size(1100, 700);
+        WindowState = FormWindowState.Maximized;
 
         // Header Panel (Responsive Layout)
         var pnlHeader = new Panel
@@ -118,7 +120,29 @@ public class MainShellForm : BaseForm
             Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
             ForeColor = ThemePalette.Warning,
             AutoSize = true,
+            Cursor = Cursors.Hand,
             Margin = new Padding(12, 6, 0, 0)
+        };
+        _lblUserBadge.Click += (s, e) =>
+        {
+            if (_authService.CurrentUser != null)
+            {
+                using var scope = _serviceProvider.CreateScope();
+                var dlg = scope.ServiceProvider.GetRequiredService<UserProfileDialog>();
+                dlg.ShowDialog(this);
+                if (dlg.LogoutRequested)
+                {
+                    _lblUserBadge.Text = "👤 Оберіть акаунт на стартовій";
+                    _lblUserBadge.ForeColor = ThemePalette.Warning;
+                    _lblCurrentUser.Text = "  |  Користувач: Не обрано";
+                    _lblCurrentUser.ForeColor = ThemePalette.Warning;
+                    _navStart.PerformClick();
+                }
+            }
+            else
+            {
+                _navStart.PerformClick();
+            }
         };
 
         var clockTimer = new System.Windows.Forms.Timer { Interval = 1000 };
@@ -134,9 +158,9 @@ public class MainShellForm : BaseForm
         var pnlSidebar = new Panel
         {
             Dock = DockStyle.Left,
-            Width = 220,
+            Width = 250,
             BackColor = ThemePalette.BackgroundSidebar,
-            Padding = new Padding(10)
+            Padding = new Padding(12)
         };
 
         _navStart = CreateNavButton("🏠  Старт & Акаунти", () => ShowStartView());
@@ -144,11 +168,13 @@ public class MainShellForm : BaseForm
         _navHotel = CreateNavButton("🏨  Готель & Шахматка", () => ShowView<HotelFrontDeskForm>());
         _navKds = CreateNavButton("👨‍🍳  Кухня (KDS)", () => ShowView<KitchenDisplayForm>());
         _navInventory = CreateNavButton("📦  Склад & Товари", () => ShowView<InventoryForm>());
+        _navStaff = CreateNavButton("👥  Персонал & Зміни", () => ShowView<StaffMonitoringForm>());
         _navAnalytics = CreateNavButton("📊  BI Аналітика", () => ShowView<AnalyticsForm>());
         _navLogs = CreateNavButton("📜  Журнал (Logs)", () => ShowView<LogsViewerForm>());
 
         pnlSidebar.Controls.Add(_navLogs);
         pnlSidebar.Controls.Add(_navAnalytics);
+        pnlSidebar.Controls.Add(_navStaff);
         pnlSidebar.Controls.Add(_navInventory);
         pnlSidebar.Controls.Add(_navKds);
         pnlSidebar.Controls.Add(_navHotel);
@@ -187,7 +213,7 @@ public class MainShellForm : BaseForm
     {
         base.OnShown(e);
         Log.Information("MainShellForm.OnShown triggered. Calling _navStart.PerformClick()...");
-        WindowState = FormWindowState.Normal;
+        WindowState = FormWindowState.Maximized;
         BringToFront();
         Activate();
         _navStart.PerformClick();
@@ -198,10 +224,11 @@ public class MainShellForm : BaseForm
         var btn = new Button
         {
             Text = text,
+            UseMnemonic = false,
             Dock = DockStyle.Top,
             Height = 48,
             FlatStyle = FlatStyle.Flat,
-            Font = new Font("Segoe UI", 10f, FontStyle.Bold),
+            Font = new Font("Segoe UI", 10.5f, FontStyle.Bold),
             ForeColor = ThemePalette.TextMuted,
             BackColor = Color.Transparent,
             TextAlign = ContentAlignment.MiddleLeft,

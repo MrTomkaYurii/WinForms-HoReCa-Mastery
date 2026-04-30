@@ -1,8 +1,9 @@
+using System.Diagnostics;
 using System.Drawing;
+using System.IO;
 using System.Windows.Forms;
 using HoReCa.Application.DTOs;
 using HoReCa.Application.Interfaces;
-using HoReCa.Domain.Entities;
 using HoReCa.Domain.Enums;
 using HoReCa.WinForms.Common;
 using HoReCa.WinForms.Controls;
@@ -13,59 +14,163 @@ public class PosTerminalForm : BaseForm
 {
     private readonly ITablePosService _posService;
     private readonly IReceiptPrintService _printService;
+    private readonly IPdfReportService _pdfReportService;
+    private readonly IAuthService _authService;
+
+    // View Switching: Hall vs Menu
+    private readonly Panel _pnlTopBar;
+    private readonly Button _btnModeHall;
+    private readonly Button _btnModeMenu;
+    private readonly Panel _pnlViewContainer;
+    private readonly Panel _pnlHallView;
+    private readonly Panel _pnlMenuView;
+
+    // Hall View Controls
     private readonly Panel _pnlFloorCanvas;
-    private readonly FlowLayoutPanel _pnlMenuItems;
-    private readonly DataGridView _gridCurrentOrder;
-    private readonly Label _lblSelectedTable;
-    private readonly Label _lblOrderTotal;
     private readonly FlowLayoutPanel _pnlZoneTabs;
-    private readonly List<CreateOrderItemRequest> _currentDraftItems = new();
-    
-    private TableDto? _selectedTable;
-    private OrderDto? _activeOrder;
     private int? _currentZoneId;
 
-    public PosTerminalForm(ITablePosService posService, IReceiptPrintService printService)
+    // Menu & Order View Controls
+    private SplitContainer _splitMenu = null!;
+    private readonly TextBox _txtSearchDish;
+    private readonly FlowLayoutPanel _pnlCategoryTabs;
+    private readonly FlowLayoutPanel _pnlDishGrid;
+    private readonly DataGridView _gridTicket;
+    private readonly Label _lblTicketTable;
+    private readonly Label _lblTicketWaiter;
+    private readonly Label _lblTicketSubtotal;
+    private readonly Label _lblTicketTotal;
+    private readonly Button _btnSendToKitchen;
+    private readonly Button _btnPay;
+    private readonly Button _btnPrintPdf;
+    private readonly Button _btnClearTicket;
+
+    private TableDto? _selectedTable;
+    private OrderDto? _activeOrder;
+    private readonly List<CreateOrderItemRequest> _currentDraftItems = new();
+    private List<MenuItemDto> _allMenuItems = new();
+    private int? _currentCategoryId;
+
+    public PosTerminalForm(
+        ITablePosService posService,
+        IReceiptPrintService printService,
+        IPdfReportService pdfReportService,
+        IAuthService authService)
     {
         _posService = posService;
         _printService = printService;
+        _pdfReportService = pdfReportService;
+        _authService = authService;
 
-        var splitMain = new SplitContainer
+        Padding = new Padding(12);
+        BackColor = ThemePalette.BackgroundDark;
+
+        // 1. Top Navigation Bar
+        _pnlTopBar = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 50,
+            BackColor = ThemePalette.BackgroundSidebar,
+            Padding = new Padding(12, 8, 12, 8)
+        };
+
+        var pnlModes = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Left,
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            BackColor = Color.Transparent
+        };
+
+        _btnModeHall = new Button
+        {
+            Text = "🗺️  СХЕМА ЗАЛІВ",
+            Height = 34,
+            AutoSize = true,
+            FlatStyle = FlatStyle.Flat,
+            BackColor = ThemePalette.BackgroundCardHover,
+            ForeColor = ThemePalette.Primary,
+            Font = ThemePalette.TitleFont,
+            Cursor = Cursors.Hand,
+            Margin = new Padding(0, 0, 8, 0)
+        };
+        _btnModeHall.FlatAppearance.BorderColor = ThemePalette.Primary;
+        _btnModeHall.Click += (s, e) => SwitchToHallView();
+
+        _btnModeMenu = new Button
+        {
+            Text = "🍽️  ЗАМОВЛЕННЯ & МЕНЮ",
+            Height = 34,
+            AutoSize = true,
+            FlatStyle = FlatStyle.Flat,
+            BackColor = ThemePalette.BackgroundCard,
+            ForeColor = ThemePalette.TextMuted,
+            Font = ThemePalette.TitleFont,
+            Cursor = Cursors.Hand,
+            Margin = new Padding(0, 0, 8, 0)
+        };
+        _btnModeMenu.FlatAppearance.BorderColor = ThemePalette.Border;
+        _btnModeMenu.Click += (s, e) => SwitchToMenuView();
+
+        pnlModes.Controls.AddRange(new Control[] { _btnModeHall, _btnModeMenu });
+
+        var pnlTopRight = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Right,
+            AutoSize = true,
+            FlowDirection = FlowDirection.RightToLeft,
+            WrapContents = false,
+            BackColor = Color.Transparent
+        };
+
+        var btnQuickArrange = new Button
+        {
+            Text = "📐 Вирівняти столики сіткою",
+            Height = 34,
+            AutoSize = true,
+            FlatStyle = FlatStyle.Flat,
+            BackColor = ThemePalette.BackgroundCard,
+            ForeColor = ThemePalette.TextPrimary,
+            Font = ThemePalette.SmallFont,
+            Cursor = Cursors.Hand
+        };
+        btnQuickArrange.FlatAppearance.BorderColor = ThemePalette.Border;
+        btnQuickArrange.Click += async (s, e) => await ArrangeTablesInGridAsync();
+
+        pnlTopRight.Controls.Add(btnQuickArrange);
+
+        _pnlTopBar.Controls.Add(pnlTopRight);
+        _pnlTopBar.Controls.Add(pnlModes);
+
+        // 2. View Container
+        _pnlViewContainer = new Panel
         {
             Dock = DockStyle.Fill,
-            Orientation = Orientation.Vertical,
-            SplitterDistance = 620,
-            SplitterWidth = 4,
-            BackColor = ThemePalette.Border
+            BackColor = ThemePalette.BackgroundDark,
+            Padding = new Padding(0, 10, 0, 0)
         };
 
-        Resize += (s, e) =>
+        // --- SUBVIEW 1: HALL VIEW ---
+        _pnlHallView = new Panel { Dock = DockStyle.Fill, BackColor = ThemePalette.BackgroundDark };
+
+        var pnlHallToolbar = new Panel
         {
-            if (ClientSize.Width > 800)
-            {
-                try
-                {
-                    int targetDist = Math.Max(350, ClientSize.Width - 360);
-                    if (targetDist > 100 && targetDist < splitMain.Width - 100)
-                    {
-                        splitMain.SplitterDistance = targetDist;
-                    }
-                }
-                catch { }
-            }
+            Dock = DockStyle.Top,
+            Height = 44,
+            BackColor = ThemePalette.BackgroundSidebar,
+            Padding = new Padding(12, 6, 12, 6)
         };
 
-        // LEFT: Floor Plan + Menu Items
-        var splitLeft = new SplitContainer
+        _pnlZoneTabs = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill,
-            Orientation = Orientation.Horizontal,
-            SplitterDistance = 330,
-            SplitterWidth = 4,
-            BackColor = ThemePalette.Border
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            BackColor = Color.Transparent
         };
+        pnlHallToolbar.Controls.Add(_pnlZoneTabs);
 
-        // Floor Plan Canvas
         _pnlFloorCanvas = new Panel
         {
             Dock = DockStyle.Fill,
@@ -73,158 +178,270 @@ public class PosTerminalForm : BaseForm
             AutoScroll = true
         };
 
-        var pnlFloorToolbar = new Panel
-        {
-            Dock = DockStyle.Top,
-            Height = 44,
-            BackColor = ThemePalette.BackgroundSidebar,
-            Padding = new Padding(10, 6, 10, 6)
-        };
+        _pnlHallView.Controls.Add(_pnlFloorCanvas);
+        _pnlHallView.Controls.Add(pnlHallToolbar);
 
-        var lblFloorTitle = new Label
-        {
-            Text = "СХЕМА ЗАЛУ",
-            Font = ThemePalette.TitleFont,
-            ForeColor = ThemePalette.TextPrimary,
-            Dock = DockStyle.Left,
-            TextAlign = ContentAlignment.MiddleLeft,
-            AutoSize = true
-        };
+        // --- SUBVIEW 2: MENU & ACTIVE TICKET VIEW ---
+        _pnlMenuView = new Panel { Dock = DockStyle.Fill, BackColor = ThemePalette.BackgroundDark, Visible = false };
 
-        _pnlZoneTabs = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Right,
-            AutoSize = true,
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
-            BackColor = Color.Transparent
-        };
-
-        pnlFloorToolbar.Controls.Add(_pnlZoneTabs);
-        pnlFloorToolbar.Controls.Add(lblFloorTitle);
-
-        var pnlFloorWrapper = new Panel { Dock = DockStyle.Fill };
-        pnlFloorWrapper.Controls.Add(_pnlFloorCanvas);
-        pnlFloorWrapper.Controls.Add(pnlFloorToolbar);
-        pnlFloorToolbar.BringToFront();
-        splitLeft.Panel1.Controls.Add(pnlFloorWrapper);
-
-        // Menu items selection panel
-        var pnlMenuWrapper = new Panel { Dock = DockStyle.Fill, BackColor = ThemePalette.BackgroundDark };
-        
-        var pnlCategoryFilter = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Top,
-            Height = 44,
-            BackColor = ThemePalette.BackgroundSidebar,
-            Padding = new Padding(6),
-            WrapContents = false,
-            AutoScroll = true
-        };
-
-        _pnlMenuItems = new FlowLayoutPanel
+        _splitMenu = new SplitContainer
         {
             Dock = DockStyle.Fill,
-            AutoScroll = true,
-            Padding = new Padding(8),
+            Orientation = Orientation.Vertical,
+            FixedPanel = FixedPanel.Panel2,
+            SplitterWidth = 6,
+            BackColor = ThemePalette.BackgroundDark
+        };
+        _splitMenu.SizeChanged += (s, e) =>
+        {
+            if (_splitMenu.Width > 600)
+            {
+                var target = Math.Max(350, _splitMenu.Width - 440);
+                if (target < _splitMenu.Width - 250)
+                {
+                    _splitMenu.SplitterDistance = target;
+                }
+            }
+        };
+
+        // Left / Center: Catalog Browser
+        var pnlCatalog = new Panel
+        {
+            Dock = DockStyle.Fill,
             BackColor = ThemePalette.BackgroundDark
         };
 
-        pnlMenuWrapper.Controls.Add(_pnlMenuItems);
-        pnlMenuWrapper.Controls.Add(pnlCategoryFilter);
-        splitLeft.Panel2.Controls.Add(pnlMenuWrapper);
+        var pnlSearchAndFilters = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            ColumnCount = 1,
+            RowCount = 2,
+            BackColor = ThemePalette.BackgroundSidebar,
+            Padding = new Padding(12, 10, 12, 10)
+        };
+        pnlSearchAndFilters.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
 
-        splitMain.Panel1.Controls.Add(splitLeft);
+        _txtSearchDish = new TextBox
+        {
+            Dock = DockStyle.Top,
+            Height = 32,
+            BackColor = ThemePalette.BackgroundInput,
+            ForeColor = ThemePalette.TextPrimary,
+            BorderStyle = BorderStyle.FixedSingle,
+            Font = ThemePalette.BodyFont,
+            PlaceholderText = "🔍 Пошук страви за назвою або інгредієнтом...",
+            Margin = new Padding(0, 0, 0, 8)
+        };
+        _txtSearchDish.TextChanged += (s, e) => FilterDishes();
 
-        // RIGHT: Active Check / Order Details
-        var pnlOrderRight = new Panel
+        _pnlCategoryTabs = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = true,
+            AutoScroll = false,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0)
+        };
+
+        pnlSearchAndFilters.Controls.Add(_txtSearchDish, 0, 0);
+        pnlSearchAndFilters.Controls.Add(_pnlCategoryTabs, 0, 1);
+
+        _pnlDishGrid = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = ThemePalette.BackgroundDark,
+            AutoScroll = true,
+            Padding = new Padding(10)
+        };
+
+        pnlCatalog.Controls.Add(_pnlDishGrid);
+        pnlCatalog.Controls.Add(pnlSearchAndFilters);
+        _splitMenu.Panel1.Controls.Add(pnlCatalog);
+
+        // Right: Active Guest Check / Ticket
+        var pnlTicket = new Panel
         {
             Dock = DockStyle.Fill,
             BackColor = ThemePalette.BackgroundCard,
             Padding = new Padding(12)
         };
 
-        var pnlOrderHeader = new Panel
+        var pnlTicketHeader = new Panel
         {
             Dock = DockStyle.Top,
-            Height = 62,
+            Height = 65,
             BackColor = ThemePalette.BackgroundInput,
             Padding = new Padding(12, 8, 12, 8)
         };
 
-        _lblSelectedTable = new Label
+        _lblTicketTable = new Label
         {
             Text = "СТОЛИК: НЕ ОБРАНО",
             Font = new Font("Segoe UI", 12f, FontStyle.Bold),
             ForeColor = ThemePalette.Primary,
             Dock = DockStyle.Top,
-            Height = 24,
-            AutoEllipsis = true
+            Height = 24
         };
 
-        var lblWaiter = new Label
+        _lblTicketWaiter = new Label
         {
-            Text = "Офіціант: Юрій Т.  |  Зміна: Відкрита",
+            Text = "Офіціант: —  |  Статус: Нове",
             Font = ThemePalette.SmallFont,
             ForeColor = ThemePalette.TextMuted,
             Dock = DockStyle.Top,
-            Height = 18,
-            AutoEllipsis = true
+            Height = 20
         };
-        pnlOrderHeader.Controls.AddRange(new Control[] { lblWaiter, _lblSelectedTable });
 
-        // Order Grid
-        _gridCurrentOrder = new DataGridView
+        pnlTicketHeader.Controls.AddRange(new Control[] { _lblTicketWaiter, _lblTicketTable });
+
+        // Ticket Items Grid
+        _gridTicket = new DataGridView
         {
             Dock = DockStyle.Fill,
             BackgroundColor = ThemePalette.BackgroundCard,
             BorderStyle = BorderStyle.None,
             RowHeadersVisible = false,
             AllowUserToAddRows = false,
+            AllowUserToDeleteRows = false,
+            ReadOnly = true,
             SelectionMode = DataGridViewSelectionMode.FullRowSelect,
             AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
             EnableHeadersVisualStyles = false,
-            GridColor = ThemePalette.Border
+            GridColor = ThemePalette.Border,
+            RowTemplate = { Height = 32 }
         };
 
-        _gridCurrentOrder.ColumnHeadersDefaultCellStyle.BackColor = ThemePalette.BackgroundSidebar;
-        _gridCurrentOrder.ColumnHeadersDefaultCellStyle.ForeColor = ThemePalette.TextPrimary;
-        _gridCurrentOrder.ColumnHeadersDefaultCellStyle.Font = ThemePalette.TitleFont;
-        _gridCurrentOrder.DefaultCellStyle.BackColor = ThemePalette.BackgroundCard;
-        _gridCurrentOrder.DefaultCellStyle.ForeColor = ThemePalette.TextPrimary;
-        _gridCurrentOrder.DefaultCellStyle.SelectionBackColor = ThemePalette.BackgroundInput;
-        _gridCurrentOrder.DefaultCellStyle.SelectionForeColor = ThemePalette.Primary;
+        _gridTicket.ColumnHeadersDefaultCellStyle.BackColor = ThemePalette.BackgroundSidebar;
+        _gridTicket.ColumnHeadersDefaultCellStyle.ForeColor = ThemePalette.TextPrimary;
+        _gridTicket.ColumnHeadersDefaultCellStyle.Font = ThemePalette.TitleFont;
+        _gridTicket.ColumnHeadersHeight = 34;
 
-        _gridCurrentOrder.Columns.Add("Name", "Страва");
-        _gridCurrentOrder.Columns.Add("Qty", "К-сть");
-        _gridCurrentOrder.Columns.Add("Price", "Ціна");
-        _gridCurrentOrder.Columns.Add("Total", "Сума");
+        _gridTicket.DefaultCellStyle.BackColor = ThemePalette.BackgroundCard;
+        _gridTicket.DefaultCellStyle.ForeColor = ThemePalette.TextPrimary;
+        _gridTicket.DefaultCellStyle.SelectionBackColor = ThemePalette.BackgroundInput;
+        _gridTicket.DefaultCellStyle.SelectionForeColor = ThemePalette.Primary;
+        _gridTicket.DefaultCellStyle.Font = ThemePalette.BodyFont;
 
-        _gridCurrentOrder.Columns[0].FillWeight = 50;
-        _gridCurrentOrder.Columns[1].FillWeight = 15;
-        _gridCurrentOrder.Columns[2].FillWeight = 17;
-        _gridCurrentOrder.Columns[3].FillWeight = 18;
+        _gridTicket.Columns.Add("Name", "Страва");
+        _gridTicket.Columns.Add("Qty", "К-сть");
+        _gridTicket.Columns.Add("Price", "Ціна");
+        _gridTicket.Columns.Add("Total", "Сума");
 
-        // Bottom payment & action panel (Fully Responsive via TableLayoutPanels)
-        var pnlOrderBottom = new Panel
+        _gridTicket.Columns[0].FillWeight = 46;
+        _gridTicket.Columns[0].MinimumWidth = 135;
+        _gridTicket.Columns[0].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleLeft;
+        _gridTicket.Columns[0].HeaderCell.Style.Alignment = DataGridViewContentAlignment.MiddleLeft;
+
+        _gridTicket.Columns[1].FillWeight = 16;
+        _gridTicket.Columns[1].MinimumWidth = 46;
+        _gridTicket.Columns[1].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
+        _gridTicket.Columns[1].HeaderCell.Style.Alignment = DataGridViewContentAlignment.MiddleCenter;
+
+        _gridTicket.Columns[2].FillWeight = 19;
+        _gridTicket.Columns[2].MinimumWidth = 62;
+        _gridTicket.Columns[2].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
+        _gridTicket.Columns[2].HeaderCell.Style.Alignment = DataGridViewContentAlignment.MiddleRight;
+
+        _gridTicket.Columns[3].FillWeight = 19;
+        _gridTicket.Columns[3].MinimumWidth = 68;
+        _gridTicket.Columns[3].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
+        _gridTicket.Columns[3].HeaderCell.Style.Alignment = DataGridViewContentAlignment.MiddleRight;
+
+        // Ticket Controls Toolbar (Quantity Adjustments)
+        var pnlQtyControls = new FlowLayoutPanel
         {
             Dock = DockStyle.Bottom,
-            Height = 168,
+            Height = 36,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
             BackColor = ThemePalette.BackgroundSidebar,
-            Padding = new Padding(10, 6, 10, 8)
+            Padding = new Padding(6, 4, 6, 4)
         };
 
-        _lblOrderTotal = new Label
+        var btnAddQty = new Button
         {
-            Text = "РАЗОМ: 0.00 ₴",
-            Font = new Font("Segoe UI", 15f, FontStyle.Bold),
-            ForeColor = ThemePalette.Success,
+            Text = "➕ +1",
+            UseMnemonic = false,
+            Height = 28,
+            AutoSize = true,
+            FlatStyle = FlatStyle.Flat,
+            BackColor = ThemePalette.BackgroundCard,
+            ForeColor = ThemePalette.TextPrimary,
+            Font = ThemePalette.SmallFont,
+            Cursor = Cursors.Hand,
+            Margin = new Padding(0, 0, 6, 0)
+        };
+        btnAddQty.FlatAppearance.BorderColor = ThemePalette.Border;
+        btnAddQty.Click += (s, e) => AdjustSelectedQuantity(1);
+
+        var btnSubQty = new Button
+        {
+            Text = "➖ -1",
+            UseMnemonic = false,
+            Height = 28,
+            AutoSize = true,
+            FlatStyle = FlatStyle.Flat,
+            BackColor = ThemePalette.BackgroundCard,
+            ForeColor = ThemePalette.TextPrimary,
+            Font = ThemePalette.SmallFont,
+            Cursor = Cursors.Hand,
+            Margin = new Padding(0, 0, 6, 0)
+        };
+        btnSubQty.FlatAppearance.BorderColor = ThemePalette.Border;
+        btnSubQty.Click += (s, e) => AdjustSelectedQuantity(-1);
+
+        var btnRemoveLine = new Button
+        {
+            Text = "🗑️ Видалити рядок",
+            UseMnemonic = false,
+            Height = 28,
+            AutoSize = true,
+            FlatStyle = FlatStyle.Flat,
+            BackColor = ThemePalette.BackgroundCard,
+            ForeColor = ThemePalette.Danger,
+            Font = ThemePalette.SmallFont,
+            Cursor = Cursors.Hand
+        };
+        btnRemoveLine.FlatAppearance.BorderColor = ThemePalette.Border;
+        btnRemoveLine.Click += (s, e) => RemoveSelectedLine();
+
+        pnlQtyControls.Controls.AddRange(new Control[] { btnAddQty, btnSubQty, btnRemoveLine });
+
+        // Ticket Bottom Financials & Action Buttons
+        var pnlTicketBottom = new Panel
+        {
+            Dock = DockStyle.Bottom,
+            Height = 220,
+            BackColor = ThemePalette.BackgroundSidebar,
+            Padding = new Padding(12, 8, 12, 10)
+        };
+
+        _lblTicketSubtotal = new Label
+        {
+            Text = "Сума замовлення: 0.00 ₴",
+            Font = ThemePalette.SmallFont,
+            ForeColor = ThemePalette.TextMuted,
             Dock = DockStyle.Top,
-            Height = 34,
+            Height = 20,
             TextAlign = ContentAlignment.MiddleLeft
         };
 
-        var tlpActions1 = new TableLayoutPanel
+        _lblTicketTotal = new Label
+        {
+            Text = "РАЗОМ ДО СПЛАТИ: 0.00 ₴",
+            Font = new Font("Segoe UI", 14f, FontStyle.Bold),
+            ForeColor = ThemePalette.Success,
+            Dock = DockStyle.Top,
+            Height = 32,
+            TextAlign = ContentAlignment.MiddleLeft
+        };
+
+        var tlpActionsTop = new TableLayoutPanel
         {
             Dock = DockStyle.Top,
             Height = 44,
@@ -232,12 +449,13 @@ public class PosTerminalForm : BaseForm
             RowCount = 1,
             Margin = new Padding(0, 4, 0, 4)
         };
-        tlpActions1.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 55f));
-        tlpActions1.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 45f));
+        tlpActionsTop.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 54f));
+        tlpActionsTop.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 46f));
 
-        var btnSendToKitchen = new Button
+        _btnSendToKitchen = new Button
         {
-            Text = "🚀 НА КУХНЮ",
+            Text = "🚀 НА КУХНЮ (KDS)",
+            UseMnemonic = false,
             Dock = DockStyle.Fill,
             FlatStyle = FlatStyle.Flat,
             BackColor = ThemePalette.PrimaryDark,
@@ -246,12 +464,13 @@ public class PosTerminalForm : BaseForm
             Cursor = Cursors.Hand,
             Margin = new Padding(0, 0, 4, 0)
         };
-        btnSendToKitchen.FlatAppearance.BorderSize = 0;
-        btnSendToKitchen.Click += async (s, e) => await SendOrderToKitchenAsync();
+        _btnSendToKitchen.FlatAppearance.BorderSize = 0;
+        _btnSendToKitchen.Click += async (s, e) => await SendOrderToKitchenAsync();
 
-        var btnPay = new Button
+        _btnPay = new Button
         {
             Text = "💳 ОПЛАТИТИ",
+            UseMnemonic = false,
             Dock = DockStyle.Fill,
             FlatStyle = FlatStyle.Flat,
             BackColor = ThemePalette.Success,
@@ -260,26 +479,27 @@ public class PosTerminalForm : BaseForm
             Cursor = Cursors.Hand,
             Margin = new Padding(4, 0, 0, 0)
         };
-        btnPay.FlatAppearance.BorderSize = 0;
-        btnPay.Click += async (s, e) => await OpenPaymentDialogAsync();
+        _btnPay.FlatAppearance.BorderSize = 0;
+        _btnPay.Click += async (s, e) => await OpenPaymentDialogAsync();
 
-        tlpActions1.Controls.Add(btnSendToKitchen, 0, 0);
-        tlpActions1.Controls.Add(btnPay, 1, 0);
+        tlpActionsTop.Controls.Add(_btnSendToKitchen, 0, 0);
+        tlpActionsTop.Controls.Add(_btnPay, 1, 0);
 
-        var tlpActions2 = new TableLayoutPanel
+        var tlpActionsBottom = new TableLayoutPanel
         {
             Dock = DockStyle.Top,
-            Height = 36,
+            Height = 38,
             ColumnCount = 2,
             RowCount = 1,
-            Margin = new Padding(0, 4, 0, 0)
+            Margin = new Padding(0, 4, 0, 4)
         };
-        tlpActions2.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 55f));
-        tlpActions2.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 45f));
+        tlpActionsBottom.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 54f));
+        tlpActionsBottom.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 46f));
 
-        var btnPrintPrecheck = new Button
+        _btnPrintPdf = new Button
         {
-            Text = "🖨️ Пречек",
+            Text = "🖨️ ДРУК ЧЕКУ (PDF)",
+            UseMnemonic = false,
             Dock = DockStyle.Fill,
             FlatStyle = FlatStyle.Flat,
             BackColor = ThemePalette.BackgroundInput,
@@ -288,47 +508,106 @@ public class PosTerminalForm : BaseForm
             Cursor = Cursors.Hand,
             Margin = new Padding(0, 0, 4, 0)
         };
-        btnPrintPrecheck.FlatAppearance.BorderColor = ThemePalette.Border;
-        btnPrintPrecheck.Click += (s, e) => PrintPrecheck();
+        _btnPrintPdf.FlatAppearance.BorderColor = ThemePalette.Border;
+        _btnPrintPdf.Click += async (s, e) => await PrintPdfReceiptAsync();
 
-        var btnClearOrder = new Button
+        var btnBackToHall = new Button
         {
-            Text = "🗑️ Очистити",
+            Text = "⬅ ДО СХЕМИ СТОЛІВ",
+            UseMnemonic = false,
             Dock = DockStyle.Fill,
+            FlatStyle = FlatStyle.Flat,
+            BackColor = ThemePalette.BackgroundInput,
+            ForeColor = ThemePalette.TextPrimary,
+            Font = ThemePalette.SmallFont,
+            Cursor = Cursors.Hand,
+            Margin = new Padding(4, 0, 0, 0)
+        };
+        btnBackToHall.FlatAppearance.BorderColor = ThemePalette.Border;
+        btnBackToHall.Click += (s, e) => SwitchToHallView();
+
+        tlpActionsBottom.Controls.Add(_btnPrintPdf, 0, 0);
+        tlpActionsBottom.Controls.Add(btnBackToHall, 1, 0);
+
+        _btnClearTicket = new Button
+        {
+            Text = "🗑️ Очистити поточне замовлення",
+            UseMnemonic = false,
+            Dock = DockStyle.Top,
+            Height = 28,
             FlatStyle = FlatStyle.Flat,
             BackColor = ThemePalette.BackgroundInput,
             ForeColor = ThemePalette.Danger,
             Font = ThemePalette.SmallFont,
             Cursor = Cursors.Hand,
-            Margin = new Padding(4, 0, 0, 0)
+            Margin = new Padding(0, 4, 0, 0)
         };
-        btnClearOrder.FlatAppearance.BorderColor = ThemePalette.Border;
-        btnClearOrder.Click += (s, e) => ClearDraft();
+        _btnClearTicket.FlatAppearance.BorderColor = ThemePalette.Border;
+        _btnClearTicket.Click += (s, e) => ClearDraft();
 
-        tlpActions2.Controls.Add(btnPrintPrecheck, 0, 0);
-        tlpActions2.Controls.Add(btnClearOrder, 1, 0);
+        pnlTicketBottom.Controls.Add(_btnClearTicket);
+        pnlTicketBottom.Controls.Add(tlpActionsBottom);
+        pnlTicketBottom.Controls.Add(tlpActionsTop);
+        pnlTicketBottom.Controls.Add(_lblTicketTotal);
+        pnlTicketBottom.Controls.Add(_lblTicketSubtotal);
 
-        pnlOrderBottom.Controls.Add(tlpActions2);
-        pnlOrderBottom.Controls.Add(tlpActions1);
-        pnlOrderBottom.Controls.Add(_lblOrderTotal);
+        pnlTicket.Controls.Add(_gridTicket);
+        pnlTicket.Controls.Add(pnlQtyControls);
+        pnlTicket.Controls.Add(pnlTicketBottom);
+        pnlTicket.Controls.Add(pnlTicketHeader);
+        _splitMenu.Panel2.Controls.Add(pnlTicket);
 
-        pnlOrderRight.Controls.Add(_gridCurrentOrder);
-        pnlOrderRight.Controls.Add(pnlOrderBottom);
-        pnlOrderRight.Controls.Add(pnlOrderHeader);
-        splitMain.Panel2.Controls.Add(pnlOrderRight);
+        _pnlMenuView.Controls.Add(_splitMenu);
 
-        Controls.Add(splitMain);
+        _pnlViewContainer.Controls.Add(_pnlMenuView);
+        _pnlViewContainer.Controls.Add(_pnlHallView);
 
-        Load += async (s, e) => await InitializeDataAsync(pnlCategoryFilter);
+        Controls.Add(_pnlViewContainer);
+        Controls.Add(_pnlTopBar);
+
+        Load += async (s, e) => await InitializeAsync();
     }
 
-    private async Task InitializeDataAsync(FlowLayoutPanel pnlCategoryFilter)
+    private void SwitchToHallView()
     {
-        // Populate Zone Tabs
+        _pnlHallView.Visible = true;
+        _pnlMenuView.Visible = false;
+
+        _btnModeHall.BackColor = ThemePalette.BackgroundCardHover;
+        _btnModeHall.ForeColor = ThemePalette.Primary;
+        _btnModeHall.FlatAppearance.BorderColor = ThemePalette.Primary;
+
+        _btnModeMenu.BackColor = ThemePalette.BackgroundCard;
+        _btnModeMenu.ForeColor = ThemePalette.TextMuted;
+        _btnModeMenu.FlatAppearance.BorderColor = ThemePalette.Border;
+    }
+
+    private void SwitchToMenuView()
+    {
+        _pnlHallView.Visible = false;
+        _pnlMenuView.Visible = true;
+
+        if (_splitMenu != null && _splitMenu.Width > 600)
+        {
+            _splitMenu.SplitterDistance = Math.Max(350, _splitMenu.Width - 440);
+        }
+
+        _btnModeMenu.BackColor = ThemePalette.BackgroundCardHover;
+        _btnModeMenu.ForeColor = ThemePalette.Primary;
+        _btnModeMenu.FlatAppearance.BorderColor = ThemePalette.Primary;
+
+        _btnModeHall.BackColor = ThemePalette.BackgroundCard;
+        _btnModeHall.ForeColor = ThemePalette.TextMuted;
+        _btnModeHall.FlatAppearance.BorderColor = ThemePalette.Border;
+    }
+
+    private async Task InitializeAsync()
+    {
+        // 1. Zone Tabs
         var zones = await _posService.GetZonesAsync();
         _pnlZoneTabs.Controls.Clear();
 
-        var btnAllZones = CreateFilterTabButton("Всі", async () =>
+        var btnAllZones = CreateFilterTabButton("Всі зали", async () =>
         {
             _currentZoneId = null;
             await LoadTablesAsync();
@@ -338,8 +617,7 @@ public class PosTerminalForm : BaseForm
         foreach (var z in zones)
         {
             int zid = z.Id;
-            string tabName = z.Name.Replace(" зал", "").Replace(" Лаундж", "").Trim();
-            var btnZone = CreateFilterTabButton(tabName, async () =>
+            var btnZone = CreateFilterTabButton(z.Name, async () =>
             {
                 _currentZoneId = zid;
                 await LoadTablesAsync();
@@ -347,38 +625,32 @@ public class PosTerminalForm : BaseForm
             _pnlZoneTabs.Controls.Add(btnZone);
         }
 
-        var btnArrange = new Button
-        {
-            Text = "📐 Сітка",
-            Height = 30,
-            AutoSize = true,
-            FlatStyle = FlatStyle.Flat,
-            BackColor = ThemePalette.BackgroundInput,
-            ForeColor = ThemePalette.TextPrimary,
-            Font = ThemePalette.SmallFont,
-            Margin = new Padding(6, 2, 2, 2),
-            Cursor = Cursors.Hand
-        };
-        btnArrange.FlatAppearance.BorderColor = ThemePalette.BorderLight;
-        btnArrange.Click += async (s, e) => await ArrangeTablesInGridAsync();
-        _pnlZoneTabs.Controls.Add(btnArrange);
-
         await LoadTablesAsync();
 
-        // Load Categories
+        // 2. Categories
         var categories = await _posService.GetMenuCategoriesAsync();
-        pnlCategoryFilter.Controls.Clear();
+        _pnlCategoryTabs.Controls.Clear();
 
-        var btnAll = CreateCategoryButton("Всі страви", async () => await LoadMenuItemsAsync(null));
-        pnlCategoryFilter.Controls.Add(btnAll);
+        var btnAllCat = CreateCategoryButton("Всі позиції", () =>
+        {
+            _currentCategoryId = null;
+            FilterDishes();
+        }, isSelected: true);
+        _pnlCategoryTabs.Controls.Add(btnAllCat);
 
         foreach (var cat in categories)
         {
-            var btn = CreateCategoryButton(cat.Name, async () => await LoadMenuItemsAsync(cat.Id));
-            pnlCategoryFilter.Controls.Add(btn);
+            int cid = cat.Id;
+            var btnCat = CreateCategoryButton(cat.Name, () =>
+            {
+                _currentCategoryId = cid;
+                FilterDishes();
+            });
+            _pnlCategoryTabs.Controls.Add(btnCat);
         }
 
-        await LoadMenuItemsAsync(null);
+        _allMenuItems = await _posService.GetMenuItemsAsync(null);
+        FilterDishes();
     }
 
     private Button CreateFilterTabButton(string text, Func<Task> onClick, bool isSelected = false)
@@ -386,7 +658,8 @@ public class PosTerminalForm : BaseForm
         var btn = new Button
         {
             Text = text,
-            Height = 30,
+            UseMnemonic = false,
+            Height = 32,
             AutoSize = true,
             FlatStyle = FlatStyle.Flat,
             BackColor = isSelected ? ThemePalette.BackgroundCardHover : ThemePalette.BackgroundCard,
@@ -401,7 +674,7 @@ public class PosTerminalForm : BaseForm
         {
             foreach (Control c in _pnlZoneTabs.Controls)
             {
-                if (c is Button b && b.Text != "📐 Вирівняти сіткою")
+                if (c is Button b)
                 {
                     b.BackColor = ThemePalette.BackgroundCard;
                     b.ForeColor = ThemePalette.TextMuted;
@@ -417,22 +690,41 @@ public class PosTerminalForm : BaseForm
         return btn;
     }
 
-    private Button CreateCategoryButton(string text, Action onClick)
+    private Button CreateCategoryButton(string text, Action onClick, bool isSelected = false)
     {
         var btn = new Button
         {
             Text = text,
+            UseMnemonic = false,
             Height = 32,
             AutoSize = true,
             FlatStyle = FlatStyle.Flat,
-            BackColor = ThemePalette.BackgroundCard,
-            ForeColor = ThemePalette.TextPrimary,
+            BackColor = isSelected ? ThemePalette.BackgroundCardHover : ThemePalette.BackgroundCard,
+            ForeColor = isSelected ? ThemePalette.TextPrimary : ThemePalette.TextMuted,
             Font = ThemePalette.SmallFont,
-            Margin = new Padding(3),
+            Padding = new Padding(12, 4, 12, 4),
+            Margin = new Padding(0, 0, 8, 6),
             Cursor = Cursors.Hand
         };
-        btn.FlatAppearance.BorderColor = ThemePalette.Border;
-        btn.Click += (s, e) => onClick();
+        btn.FlatAppearance.BorderColor = isSelected ? ThemePalette.Primary : ThemePalette.Border;
+
+        btn.Click += (s, e) =>
+        {
+            foreach (Control c in _pnlCategoryTabs.Controls)
+            {
+                if (c is Button b)
+                {
+                    b.BackColor = ThemePalette.BackgroundCard;
+                    b.ForeColor = ThemePalette.TextMuted;
+                    b.FlatAppearance.BorderColor = ThemePalette.Border;
+                }
+            }
+            btn.BackColor = ThemePalette.BackgroundCardHover;
+            btn.ForeColor = ThemePalette.TextPrimary;
+            btn.FlatAppearance.BorderColor = ThemePalette.Primary;
+            onClick();
+        };
+
         return btn;
     }
 
@@ -441,51 +733,33 @@ public class PosTerminalForm : BaseForm
         _pnlFloorCanvas.Controls.Clear();
         var tables = await _posService.GetTablesByZoneAsync(_currentZoneId);
 
-        // Check if any tables overlap; if so, organize them cleanly
-        bool hasOverlap = CheckIfTablesOverlap(tables);
-        if (hasOverlap)
-        {
-            await ArrangeTablesInGridAsync(tables);
-            return;
-        }
-
         foreach (var table in tables)
         {
             var widget = new FloorTableWidget(table);
-            widget.TableClicked += async (s, t) => await SelectTableAsync(t);
+            widget.TableClicked += async (s, t) =>
+            {
+                await SelectTableAsync(t);
+                SwitchToMenuView();
+            };
             widget.PositionChanged += async (s, req) => await _posService.UpdateTablePositionAsync(req);
             _pnlFloorCanvas.Controls.Add(widget);
         }
     }
 
-    private static bool CheckIfTablesOverlap(List<TableDto> tables)
+    private async Task ArrangeTablesInGridAsync()
     {
-        for (int i = 0; i < tables.Count; i++)
-        {
-            for (int j = i + 1; j < tables.Count; j++)
-            {
-                var r1 = new Rectangle(tables[i].PositionX, tables[i].PositionY, tables[i].Width, tables[i].Height);
-                var r2 = new Rectangle(tables[j].PositionX, tables[j].PositionY, tables[j].Width, tables[j].Height);
-                if (r1.IntersectsWith(r2)) return true;
-            }
-        }
-        return false;
-    }
-
-    private async Task ArrangeTablesInGridAsync(List<TableDto>? tablesToArrange = null)
-    {
-        var tables = tablesToArrange ?? await _posService.GetTablesByZoneAsync(_currentZoneId);
+        var tables = await _posService.GetTablesByZoneAsync(_currentZoneId);
         _pnlFloorCanvas.Controls.Clear();
 
-        int startX = 25;
-        int startY = 20;
-        int tableWidth = 125;
+        int startX = 30;
+        int startY = 24;
+        int tableWidth = 120;
         int tableHeight = 90;
         int gapX = 24;
         int gapY = 24;
 
         int canvasWidth = Math.Max(500, _pnlFloorCanvas.ClientSize.Width > 0 ? _pnlFloorCanvas.ClientSize.Width : 750);
-        int cols = Math.Max(2, (canvasWidth - 50) / (tableWidth + gapX));
+        int cols = Math.Max(2, (canvasWidth - 60) / (tableWidth + gapX));
 
         for (int i = 0; i < tables.Count; i++)
         {
@@ -496,60 +770,70 @@ public class PosTerminalForm : BaseForm
 
             var updatedDto = tables[i] with { PositionX = newX, PositionY = newY, Width = tableWidth, Height = tableHeight };
             var widget = new FloorTableWidget(updatedDto);
-            widget.TableClicked += async (s, t) => await SelectTableAsync(t);
+            widget.TableClicked += async (s, t) =>
+            {
+                await SelectTableAsync(t);
+                SwitchToMenuView();
+            };
             widget.PositionChanged += async (s, req) => await _posService.UpdateTablePositionAsync(req);
             _pnlFloorCanvas.Controls.Add(widget);
 
-            // Persist the clean coordinates
             await _posService.UpdateTablePositionAsync(new UpdateTablePositionRequest(tables[i].Id, newX, newY));
         }
     }
 
-    private async Task LoadMenuItemsAsync(int? categoryId)
+    private void FilterDishes()
     {
-        _pnlMenuItems.Controls.Clear();
-        var items = await _posService.GetMenuItemsAsync(categoryId);
+        _pnlDishGrid.Controls.Clear();
+        string query = _txtSearchDish.Text.Trim().ToLowerInvariant();
 
-        foreach (var item in items)
+        var filtered = _allMenuItems.Where(m =>
+        {
+            if (_currentCategoryId.HasValue && m.CategoryId != _currentCategoryId.Value)
+                return false;
+
+            if (!string.IsNullOrEmpty(query))
+            {
+                bool matchesName = m.Name.ToLowerInvariant().Contains(query);
+                bool matchesDesc = m.Description?.ToLowerInvariant().Contains(query) ?? false;
+                if (!matchesName && !matchesDesc) return false;
+            }
+
+            return true;
+        }).ToList();
+
+        foreach (var item in filtered)
         {
             var card = new DishCardControl(item);
-            card.CardClicked += (s, m) => AddItemToOrder(m);
-            _pnlMenuItems.Controls.Add(card);
+            card.CardClicked += (s, m) => AddDishToOrder(m);
+            _pnlDishGrid.Controls.Add(card);
         }
     }
 
     private async Task SelectTableAsync(TableDto table)
     {
         _selectedTable = table;
-        _lblSelectedTable.Text = $"СТОЛИК: № {table.TableNumber} ({table.ZoneName})";
+        _lblTicketTable.Text = $"СТОЛИК № {table.TableNumber}  •  {table.ZoneName}";
+
+        var currentStaff = _authService.CurrentUser?.FullName ?? "Максим Іванов";
+        _lblTicketWaiter.Text = $"Офіціант: {currentStaff}  |  Місць: {table.Capacity}";
 
         _currentDraftItems.Clear();
-        _gridCurrentOrder.Rows.Clear();
-
         _activeOrder = await _posService.GetActiveOrderForTableAsync(table.Id);
-        if (_activeOrder != null)
-        {
-            foreach (var item in _activeOrder.Items)
-            {
-                _gridCurrentOrder.Rows.Add(item.ItemName, item.Quantity, $"{item.UnitPrice:F0} ₴", $"{item.TotalPrice:F2} ₴");
-            }
-            _lblOrderTotal.Text = $"РАЗОМ: {_activeOrder.TotalAmount:F2} ₴";
-        }
-        else
-        {
-            _lblOrderTotal.Text = "РАЗОМ: 0.00 ₴";
-        }
+
+        RefreshTicketGrid();
     }
 
-    private void AddItemToOrder(MenuItemDto item)
+    private void AddDishToOrder(MenuItemDto dish)
     {
         if (_selectedTable == null)
         {
-            MessageBox.Show("Будь ласка, спершу оберіть столик на схемі залу!", "Увага", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show("Будь ласка, спершу оберіть столик на схемі залу!", "Вибір столика", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            SwitchToHallView();
             return;
         }
 
-        var existing = _currentDraftItems.FirstOrDefault(i => i.MenuItemId == item.Id);
+        var existing = _currentDraftItems.FirstOrDefault(i => i.MenuItemId == dish.Id);
         if (existing != null)
         {
             _currentDraftItems.Remove(existing);
@@ -557,54 +841,127 @@ public class PosTerminalForm : BaseForm
         }
         else
         {
-            _currentDraftItems.Add(new CreateOrderItemRequest(item.Id, 1, null));
+            _currentDraftItems.Add(new CreateOrderItemRequest(dish.Id, 1, null));
         }
 
-        RefreshGrid();
+        RefreshTicketGrid();
     }
 
-    private void RefreshGrid()
+    private void AdjustSelectedQuantity(int delta)
     {
-        _gridCurrentOrder.Rows.Clear();
+        if (_gridTicket.CurrentRow == null) return;
+        string dishName = _gridTicket.CurrentRow.Cells[0].Value?.ToString() ?? "";
+
+        // Only allow adjusting draft items
+        var menuItem = _allMenuItems.FirstOrDefault(m => m.Name == dishName);
+        if (menuItem != null)
+        {
+            var draft = _currentDraftItems.FirstOrDefault(d => d.MenuItemId == menuItem.Id);
+            if (draft != null)
+            {
+                int newQty = draft.Quantity + delta;
+                _currentDraftItems.Remove(draft);
+                if (newQty > 0)
+                {
+                    _currentDraftItems.Add(draft with { Quantity = newQty });
+                }
+                RefreshTicketGrid();
+            }
+        }
+    }
+
+    private void RemoveSelectedLine()
+    {
+        if (_gridTicket.CurrentRow == null) return;
+        string dishName = _gridTicket.CurrentRow.Cells[0].Value?.ToString() ?? "";
+
+        var menuItem = _allMenuItems.FirstOrDefault(m => m.Name == dishName);
+        if (menuItem != null)
+        {
+            var draft = _currentDraftItems.FirstOrDefault(d => d.MenuItemId == menuItem.Id);
+            if (draft != null)
+            {
+                _currentDraftItems.Remove(draft);
+                RefreshTicketGrid();
+            }
+        }
+    }
+
+    private void RefreshTicketGrid()
+    {
+        _gridTicket.Rows.Clear();
         decimal total = 0;
 
+        // 1. Existing Active Order Items
         if (_activeOrder != null)
         {
-            foreach (var itm in _activeOrder.Items)
+            foreach (var item in _activeOrder.Items)
             {
-                _gridCurrentOrder.Rows.Add(itm.ItemName, itm.Quantity, $"{itm.UnitPrice:F0} ₴", $"{itm.TotalPrice:F2} ₴");
-                total += itm.TotalPrice;
+                _gridTicket.Rows.Add(item.ItemName, $"x{item.Quantity}", $"{item.UnitPrice:N0} ₴", $"{item.TotalPrice:N2} ₴");
+                total += item.TotalPrice;
             }
         }
 
-        // Add drafts
+        // 2. Draft / Newly added items
         foreach (var draft in _currentDraftItems)
         {
-            _gridCurrentOrder.Rows.Add($"[НОВЕ] Item #{draft.MenuItemId}", draft.Quantity, "—", "—");
+            var dish = _allMenuItems.FirstOrDefault(m => m.Id == draft.MenuItemId);
+            if (dish != null)
+            {
+                decimal lineTotal = draft.Quantity * dish.Price;
+                int rowIndex = _gridTicket.Rows.Add(dish.Name, $"x{draft.Quantity} [нове]", $"{dish.Price:N0} ₴", $"{lineTotal:N2} ₴");
+                _gridTicket.Rows[rowIndex].DefaultCellStyle.ForeColor = ThemePalette.Primary;
+                total += lineTotal;
+            }
         }
 
-        _lblOrderTotal.Text = $"РАЗОМ: {total:F2} ₴";
+        _lblTicketSubtotal.Text = $"Сума без знижки: {total:N2} ₴";
+        _lblTicketTotal.Text = $"РАЗОМ ДО СПЛАТИ: {total:N2} ₴";
     }
 
     private async Task SendOrderToKitchenAsync()
     {
-        if (_selectedTable == null || _currentDraftItems.Count == 0) return;
+        if (_selectedTable == null)
+        {
+            MessageBox.Show("Оберіть столик!", "Помилка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
 
-        var req = new CreateOrderRequest(_selectedTable.Id, null, "Офіціант", _currentDraftItems.ToList());
-        _activeOrder = await _posService.CreateOrderAsync(req);
-        _currentDraftItems.Clear();
+        if (_currentDraftItems.Count == 0)
+        {
+            MessageBox.Show("Додайте страви з меню до чеку!", "Чек порожній", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
 
-        await LoadTablesAsync();
-        await SelectTableAsync(_selectedTable);
+        try
+        {
+            var waiterName = _authService.CurrentUser?.FullName ?? "Офіціант";
+            var req = new CreateOrderRequest(_selectedTable.Id, null, waiterName, _currentDraftItems.ToList());
 
-        MessageBox.Show($"Замовлення {_activeOrder.OrderNumber} успішно відправлено на кухню (KDS)!", "Успіх", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            // Creates order AND automatically deducts stock via recipes!
+            _activeOrder = await _posService.CreateOrderAsync(req);
+            _currentDraftItems.Clear();
+
+            await LoadTablesAsync();
+            await SelectTableAsync(_selectedTable);
+
+            MessageBox.Show(
+                $"Замовлення {_activeOrder.OrderNumber} успішно відправлено на кухню!\nІнгредієнти автоматично списано зі складу за техкартами.",
+                "Відправлено на KDS",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Помилка відправки замовлення: {ex.Message}", "Помилка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
     }
 
     private async Task OpenPaymentDialogAsync()
     {
         if (_activeOrder == null)
         {
-            MessageBox.Show("Немає активного замовлення для оплати.", "Інфо", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show("Немає збереженого активного замовлення для оплати. Відправте замовлення на кухню перед розрахунком.", "Увага", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
@@ -614,22 +971,45 @@ public class PosTerminalForm : BaseForm
             await _posService.CloseOrderAndPayAsync(_activeOrder.Id, dlg.SelectedPaymentMethod, _activeOrder.TotalAmount);
             _activeOrder = null;
             _currentDraftItems.Clear();
+
             await LoadTablesAsync();
             if (_selectedTable != null) await SelectTableAsync(_selectedTable);
+
+            MessageBox.Show("Замовлення успішно оплачено та закрито! Стіл звільнено.", "Оплата успішна", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            SwitchToHallView();
         }
     }
 
-    private void PrintPrecheck()
+    private async Task PrintPdfReceiptAsync()
     {
-        if (_activeOrder != null)
+        if (_activeOrder == null)
         {
-            _printService.PrintReceipt(_activeOrder, "LuxeResto Restaurant", "Юрій Т.", previewOnly: true);
+            MessageBox.Show("Немає активного сформованого замовлення для друку фіскального чеку.", "Увага", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        try
+        {
+            var cashier = _authService.CurrentUser?.FullName ?? "Офіціант";
+            var filePath = await _pdfReportService.GenerateReceiptPdfAsync(_activeOrder, cashier);
+
+            MessageBox.Show($"Фіскальний чек успішно згенеровано!\nШлях: {filePath}", "Чек згенеровано", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+            try
+            {
+                Process.Start(new ProcessStartInfo(filePath) { UseShellExecute = true });
+            }
+            catch { }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Помилка створення PDF чеку: {ex.Message}", "Помилка", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 
     private void ClearDraft()
     {
         _currentDraftItems.Clear();
-        RefreshGrid();
+        RefreshTicketGrid();
     }
 }

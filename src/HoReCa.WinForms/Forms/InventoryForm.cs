@@ -3,18 +3,21 @@ using System.Windows.Forms;
 using HoReCa.Application.DTOs;
 using HoReCa.Application.Interfaces;
 using HoReCa.WinForms.Common;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace HoReCa.WinForms.Forms;
 
 public class InventoryForm : BaseForm
 {
+    private readonly IServiceProvider _serviceProvider;
     private readonly IInventoryService _inventoryService;
     private readonly DataGridView _grid;
     private readonly TextBox _txtSearch;
     private List<InventoryDto> _currentItems = new();
 
-    public InventoryForm(IInventoryService inventoryService)
+    public InventoryForm(IServiceProvider serviceProvider, IInventoryService inventoryService)
     {
+        _serviceProvider = serviceProvider;
         _inventoryService = inventoryService;
 
         var pnlHeader = new Panel
@@ -27,7 +30,7 @@ public class InventoryForm : BaseForm
 
         var lblTitle = new Label
         {
-            Text = "СКЛАДСЬКИЙ ОБЛІК ІНГРЕДІЄНТІВ",
+            Text = "СКЛАДСЬКИЙ ОБЛІК ІНГРЕДІЄНТІВ & ЗАКУПІВЛІ",
             Font = ThemePalette.TitleFont,
             ForeColor = ThemePalette.TextPrimary,
             Dock = DockStyle.Left,
@@ -45,10 +48,32 @@ public class InventoryForm : BaseForm
             Padding = new Padding(0, 12, 0, 0)
         };
 
+        var btnSupplierOrder = new Button
+        {
+            Text = "🚚 Замовити у постачальника (PO)",
+            Size = new Size(240, 32),
+            FlatStyle = FlatStyle.Flat,
+            BackColor = ThemePalette.PrimaryDark,
+            ForeColor = Color.White,
+            Font = ThemePalette.SmallFont,
+            Cursor = Cursors.Hand,
+            Margin = new Padding(8, 0, 0, 0)
+        };
+        btnSupplierOrder.FlatAppearance.BorderSize = 0;
+        btnSupplierOrder.Click += async (s, e) =>
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var dlg = scope.ServiceProvider.GetRequiredService<SupplierOrderDialog>();
+            if (dlg.ShowDialog(this) == DialogResult.OK)
+            {
+                await LoadInventoryAsync();
+            }
+        };
+
         var btnAddStock = new Button
         {
-            Text = "+ Поповнити залишок",
-            Size = new Size(160, 32),
+            Text = "+ Швидкий прихід",
+            Size = new Size(130, 32),
             FlatStyle = FlatStyle.Flat,
             BackColor = ThemePalette.BackgroundCard,
             ForeColor = ThemePalette.TextPrimary,
@@ -61,16 +86,17 @@ public class InventoryForm : BaseForm
 
         _txtSearch = new TextBox
         {
-            Width = 240,
+            Width = 220,
             Height = 30,
             BackColor = ThemePalette.BackgroundInput,
             ForeColor = ThemePalette.TextPrimary,
             BorderStyle = BorderStyle.FixedSingle,
             Font = ThemePalette.BodyFont,
-            PlaceholderText = "🔍 Пошук за назвою або SKU..."
+            PlaceholderText = "🔍 Пошук за назвою/SKU..."
         };
         _txtSearch.TextChanged += async (s, e) => await LoadInventoryAsync();
 
+        pnlHeaderRight.Controls.Add(btnSupplierOrder);
         pnlHeaderRight.Controls.Add(btnAddStock);
         pnlHeaderRight.Controls.Add(_txtSearch);
 

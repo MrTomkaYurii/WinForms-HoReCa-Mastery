@@ -11,7 +11,6 @@ namespace HoReCa.WinForms.Controls;
 public class KitchenTicketControl : UserControl
 {
     private readonly OrderDto _order;
-    private readonly System.Windows.Forms.Timer _timer;
     private readonly Label _lblTimer;
     private readonly Button _btnBump;
 
@@ -108,6 +107,7 @@ public class KitchenTicketControl : UserControl
             Dock = DockStyle.Bottom,
             Height = 44,
             FlatStyle = FlatStyle.Flat,
+            UseMnemonic = false,
             Font = new Font("Segoe UI", 10f, FontStyle.Bold),
             ForeColor = ThemePalette.TextInverse,
             Cursor = Cursors.Hand
@@ -121,9 +121,6 @@ public class KitchenTicketControl : UserControl
         Controls.Add(pnlHeader);
         Controls.Add(_btnBump);
 
-        _timer = new System.Windows.Forms.Timer { Interval = 1000 };
-        _timer.Tick += (s, e) => UpdateTimer();
-        _timer.Start();
         UpdateTimer();
     }
 
@@ -150,7 +147,7 @@ public class KitchenTicketControl : UserControl
         }
     }
 
-    private void UpdateTimer()
+    public void UpdateTimer()
     {
         var elapsed = DateTime.UtcNow - _order.CreatedAt;
         _lblTimer.Text = $"{(int)elapsed.TotalMinutes:D2}:{elapsed.Seconds:D2}";
@@ -167,11 +164,6 @@ public class KitchenTicketControl : UserControl
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing)
-        {
-            _timer.Stop();
-            _timer.Dispose();
-        }
         base.Dispose(disposing);
     }
 }

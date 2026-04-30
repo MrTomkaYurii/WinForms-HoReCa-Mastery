@@ -12,6 +12,7 @@ public class KitchenDisplayForm : BaseForm
     private readonly IKitchenService _kitchenService;
     private readonly FlowLayoutPanel _pnlTickets;
     private readonly System.Windows.Forms.Timer _refreshTimer;
+    private readonly System.Windows.Forms.Timer _secondTimer;
     private int _lastTicketsCount;
 
     public KitchenDisplayForm(IKitchenService kitchenService)
@@ -77,6 +78,17 @@ public class KitchenDisplayForm : BaseForm
         _refreshTimer.Tick += async (s, e) => await LoadKitchenOrdersAsync();
         _refreshTimer.Start();
 
+        _secondTimer = new System.Windows.Forms.Timer { Interval = 1000 };
+        _secondTimer.Tick += (s, e) =>
+        {
+            foreach (Control c in _pnlTickets.Controls)
+            {
+                if (c is KitchenTicketControl ticket)
+                    ticket.UpdateTimer();
+            }
+        };
+        _secondTimer.Start();
+
         Load += async (s, e) => await LoadKitchenOrdersAsync();
     }
 
@@ -90,6 +102,10 @@ public class KitchenDisplayForm : BaseForm
         }
         _lastTicketsCount = orders.Count;
 
+        foreach (Control c in _pnlTickets.Controls)
+        {
+            c.Dispose();
+        }
         _pnlTickets.Controls.Clear();
 
         if (orders.Count == 0)
@@ -124,6 +140,8 @@ public class KitchenDisplayForm : BaseForm
         {
             _refreshTimer.Stop();
             _refreshTimer.Dispose();
+            _secondTimer.Stop();
+            _secondTimer.Dispose();
         }
         base.Dispose(disposing);
     }
