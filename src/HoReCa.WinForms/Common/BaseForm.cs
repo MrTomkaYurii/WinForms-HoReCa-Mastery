@@ -10,7 +10,6 @@ public class BaseForm : Form
         // Flicker-free GDI+ rendering
         SetStyle(
             ControlStyles.AllPaintingInWmPaint |
-            ControlStyles.UserPaint |
             ControlStyles.OptimizedDoubleBuffer |
             ControlStyles.ResizeRedraw,
             true);
