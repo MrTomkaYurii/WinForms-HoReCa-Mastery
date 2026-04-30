@@ -1,19 +1,32 @@
-# WinForms HoReCa Mastery: Enterprise Hotel & Restaurant Management System
+# 🏨 WinForms HoReCa Mastery: Комплексна ERP/POS-система ресторанно-готельного комплексу
 
-A production-grade, educational enterprise desktop solution built on **.NET 10** and **Windows Forms**, demonstrating modern software engineering practices, Clean Architecture, Microsoft Generic Host, Dependency Injection, and dual-database persistence (PostgreSQL / SQLite).
+Ласкаво просимо до **WinForms HoReCa Mastery** — флагманського навчально-виробничого проєкту на базі **.NET 10** та **Windows Forms**. Проєкт демонструє побудову відмовостійкої корпоративної десктопної екосистеми для індустрії гостинності (Hotel, Restaurant, Catering/Cafe) із застосуванням стандартів **Clean Architecture**, **Domain-Driven Design (DDD)**, **Microsoft Generic Host**, **Dependency Injection**, а також гібридної системи персистентності (**PostgreSQL 15+** та локальний офлайн-фолбек на **SQLite**).
 
 ---
 
-## Architecture Overview
+## 📑 Зміст документації
 
-The system is designed following **Clean Architecture** and **Domain-Driven Design (DDD)** principles to completely isolate business logic from presentation and database concerns.
+1. [Архітектурна концепція (Clean Architecture & C4)](#-архітектурна-концепція)
+2. [Діаграма сутностей та реляційна модель (ERD)](#-реляційна-модель-бази-даних)
+3. [Демонстраційні ролі та швидкий вхід](#-демонстраційні-ролі-та-система-авторизації)
+4. [Каталог компонентів Windows Forms](#-використання-компонентів-windows-forms)
+5. [Структура рішення та посилання на код](#-структура-проєкту-та-вихідний-код)
+6. [Навчальний курс (20 практичних гайдів)](#-навчальний-курс-20-покрокових-уроків)
+7. [Інструкція зі встановлення та запуску](#-інструкція-зі-встановлення-та-запуску)
+8. [Тестування та верифікація якості](#-тестування-та-контроль-якості)
+
+---
+
+## 🏛 Архітектурна концепція
+
+Система побудована за принципами багатошарової **Чистої Архітектури (Clean Architecture)**. Шари ізольовані один від одного, а залежності спрямовані виключно всередину — до шару доменних правил.
 
 ```mermaid
 graph TD
-    UI["Presentation Layer: HoReCa.WinForms<br/>Generic Host, Dark Shell, Custom GDI+ Controls, ScottPlot"]
-    INFRA["Infrastructure Layer: HoReCa.Infrastructure<br/>EF Core 10, Npgsql (PostgreSQL), SQLite Fallback, Bogus Seeder"]
-    APP["Application Layer: HoReCa.Application<br/>DTOs, FluentValidation, Domain Interfaces, Services"]
-    DOMAIN["Domain Layer: HoReCa.Domain<br/>Entities, Aggregates, Invariant Calculations, Enums"]
+    UI["🖥️ Presentation Layer: HoReCa.WinForms<br/>Generic Host, Dark Shell, Custom GDI+ Controls, ScottPlot 5"]
+    INFRA["💾 Infrastructure Layer: HoReCa.Infrastructure<br/>EF Core 10, Npgsql (PostgreSQL), SQLite Fallback, Bogus Seeder"]
+    APP["⚙️ Application Layer: HoReCa.Application<br/>DTOs, FluentValidation, Domain Interfaces, POS Services"]
+    DOMAIN["💎 Domain Layer: HoReCa.Domain<br/>Entities, Aggregates, Invariants, Business Rules, Enums"]
 
     UI --> APP
     UI --> INFRA
@@ -22,31 +35,31 @@ graph TD
     APP --> DOMAIN
 ```
 
----
+### Рівень контейнерів (C4 Container Diagram)
 
-## C4 Container Architecture
+У продакшн-середовищі POS-термінали та робочі станції адміністраторів працюють автономно. При втраті зв'язку з головним кластером PostgreSQL система плавно перемикається на локальну вбудовану базу даних SQLite, гарантуючи безперебійне обслуговування гостей.
 
 ```mermaid
 flowchart TB
-    subgraph ClientWorkstation["Client Workstation (Windows 10 / 11)"]
-        subgraph WinFormsApp["WinForms-HoReCa-Mastery Application (.NET 10)"]
+    subgraph ClientWorkstation["Клієнтська робоча станція касира / адміністратора (Windows 10/11)"]
+        subgraph WinFormsApp["Застосунок HoReCa.WinForms (.NET 10)"]
             Host["Microsoft Generic Host (IHost)"]
-            DI["Service Provider (DI Container)"]
-            Shell["Main Shell Form (Navigation & Layout)"]
-            PosMod["POS Module (Floor Plan, Orders, Numpad)"]
-            HotelMod["Hotel Module (Front Desk, Room Rack)"]
-            KdsMod["Kitchen Display System (KDS)"]
-            InvMod["Inventory Management Module"]
-            ChartMod["Executive Analytics (ScottPlot 5)"]
-            LogMod["Serilog Real-Time Diagnostics Sink"]
-            PrintMod["Thermal Receipt Engine (PrintDocument)"]
+            DI["Service Provider (IoC Container)"]
+            Shell["Головна форма-оболонка (MainShellForm)"]
+            PosMod["POS-термінал залу та замовлень (PosTerminalForm)"]
+            HotelMod["Рецепція та шахматка номерів (HotelFrontDeskForm)"]
+            KdsMod["Кухонний монітор кухаря (KitchenDisplayForm)"]
+            InvMod["Складський облік залишків (InventoryForm)"]
+            ChartMod["Аналітична панель керівника (AnalyticsForm)"]
+            LogMod["Діагностичний термінал (SerilogRichTextBoxSink)"]
+            PrintMod["Драйвер чекодруку 80мм (ReceiptPrinterEngine)"]
         end
-        LocalDb[("Local SQLite Database<br/>(horeca_mastery.db)")]
+        LocalDb[("Локальний SQLite<br/>(horeca_mastery.db)")]
     end
 
-    subgraph ExternalServices["External Infrastructure"]
-        RemotePg[("Central PostgreSQL Cluster<br/>(Npgsql EF Core 10)")]
-        ThermalPrinter["POS Thermal Receipt Printer (80mm)"]
+    subgraph ExternalServices["Серверна інфраструктура та обладнання"]
+        RemotePg[("Центральний кластер PostgreSQL<br/>(EF Core 10 Npgsql)")]
+        ThermalPrinter["Термопринтер чеків ESC/POS (80 мм / GDI+)"]
     end
 
     Shell --> PosMod
@@ -56,348 +69,283 @@ flowchart TB
     Shell --> ChartMod
     Shell --> LogMod
     PosMod --> PrintMod
-    PrintMod -.-> ThermalPrinter
+    PrintMod -.->|USB / COM / RAW Spool| ThermalPrinter
 
     PosMod & HotelMod & KdsMod & InvMod & ChartMod --> DI
     DI --> Host
-    Host --> RemotePg
-    Host -.->|Fallback if Offline| LocalDb
+    Host -->|Основне підключення| RemotePg
+    Host -.->|Автономний офлайн-режим| LocalDb
 ```
+
+Детальніше про життєві цикли сервісів, потокову модель STA та відсутність витоків пам'яті GDI+ читайте у [Docs/ARCHITECTURE.md](Docs/ARCHITECTURE.md).
 
 ---
 
-## Database Relational Model (ER Diagram)
+## 🗄 Реляційна модель бази даних
+
+Модель даних охоплює весь операційний цикл HoReCa: від бронювання готельних номерів і схеми розміщення столів ресторану до касових чеків, руху інгредієнтів на складі та аудиту персоналу.
 
 ```mermaid
 erDiagram
-    TABLE_ZONE ||--o{ RESTAURANT_TABLE : "contains"
-    RESTAURANT_TABLE ||--o{ ORDER : "assigned to"
-    MENU_CATEGORY ||--o{ MENU_ITEM : "categorizes"
-    MENU_ITEM ||--o{ ORDER_ITEM : "ordered as"
-    ORDER ||--|{ ORDER_ITEM : "contains"
-    ORDER ||--o| PAYMENT : "settled by"
+    TABLE_ZONE ||--o{ RESTAURANT_TABLE : "зонує"
+    RESTAURANT_TABLE ||--o{ ORDER : "закріплений стіл"
+    MENU_CATEGORY ||--o{ MENU_ITEM : "групує страви"
+    MENU_ITEM ||--o{ ORDER_ITEM : "входить у рядок"
+    ORDER ||--|{ ORDER_ITEM : "деталізація чека"
+    ORDER ||--o| PAYMENT : "фіскальна транзакція"
     
-    ROOM ||--o{ ROOM_BOOKING : "booked in"
-    GUEST ||--o{ ROOM_BOOKING : "reserves"
-    ROOM_BOOKING ||--o{ ORDER : "room charge"
-    ROOM_BOOKING ||--o{ PAYMENT : "settled by"
+    ROOM ||--o{ ROOM_BOOKING : "заброньований номер"
+    GUEST ||--o{ ROOM_BOOKING : "оформлене бронювання"
+    ROOM_BOOKING ||--o{ ORDER : "нарахування на номер"
+    ROOM_BOOKING ||--o{ PAYMENT : "оплата проживання"
 
-    TABLE_ZONE {
-        int id PK
-        string name
-        string description
-        int display_order
-    }
+    USER_ACCOUNT ||--o{ ORDER : "обслуговує офіціант"
+    USER_ACCOUNT ||--o{ PAYMENT : "касир операції"
 
     RESTAURANT_TABLE {
-        int id PK
-        int zone_id FK
-        int table_number
-        int capacity
-        int status
-        int shape
-        int pos_x
-        int pos_y
-        int width
-        int height
-    }
-
-    MENU_CATEGORY {
-        int id PK
-        string name
-        string icon_key
-        int display_order
-        bool route_to_kitchen
-    }
-
-    MENU_ITEM {
-        int id PK
-        int category_id FK
-        string name
-        string description
-        decimal price
-        int preparation_minutes
-        bool is_available
-        string image_url
+        int Id PK
+        int ZoneId FK
+        int TableNumber
+        int Capacity
+        int Status
+        int Shape
+        int PosX
+        int PosY
     }
 
     ORDER {
-        int id PK
-        int table_id FK
-        int booking_id FK
-        string order_number
-        string waiter_name
-        int status
-        decimal subtotal
-        decimal discount_percent
-        decimal total_amount
-        datetime created_at
-    }
-
-    ORDER_ITEM {
-        int id PK
-        int order_id FK
-        int menu_item_id FK
-        string item_name
-        int quantity
-        decimal unit_price
-        decimal total_price
-        string modifiers_or_notes
-        int status
-    }
-
-    GUEST {
-        int id PK
-        string full_name
-        string phone
-        string email
-        string passport_or_id
+        int Id PK
+        int TableId FK
+        int BookingId FK
+        string OrderNumber
+        string WaiterName
+        int Status
+        decimal Subtotal
+        decimal DiscountPercent
+        decimal TotalAmount
+        datetime CreatedAt
     }
 
     ROOM {
-        int id PK
-        string room_number
-        int floor
-        int type
-        decimal daily_rate
-        int capacity
-        int status
+        int Id PK
+        string RoomNumber
+        int Floor
+        int Type
+        decimal DailyRate
+        int Capacity
+        int Status
     }
 
     ROOM_BOOKING {
-        int id PK
-        int room_id FK
-        int guest_id FK
-        datetime check_in_date
-        datetime check_out_date
-        decimal total_amount
-        bool is_checked_in
-        bool is_checked_out
-        string special_requests
+        int Id PK
+        int RoomId FK
+        int GuestId FK
+        datetime CheckInDate
+        datetime CheckOutDate
+        decimal TotalAmount
+        bool IsCheckedIn
+        bool IsCheckedOut
     }
 
     INVENTORY_ITEM {
-        int id PK
-        string name
-        string sku
-        string unit
-        decimal current_stock
-        decimal minimum_stock
-        decimal cost_per_unit
-    }
-
-    USER_ACCOUNT {
-        int id PK
-        string username
-        string full_name
-        string password_hash
-        string pin_code
-        int role
-        bool is_active
-        datetime last_login_at
+        int Id PK
+        string Name
+        string Sku
+        string Unit
+        decimal CurrentStock
+        decimal MinimumStock
+        decimal CostPerUnit
     }
 
     PAYMENT {
-        int id PK
-        int order_id FK
-        int booking_id FK
-        decimal amount
-        int method
-        int status
-        string transaction_reference
-        datetime created_at
+        int Id PK
+        int OrderId FK
+        int BookingId FK
+        decimal Amount
+        int Method
+        int Status
+        string TransactionReference
+        datetime CreatedAt
     }
 ```
 
----
-
-## Demo Accounts & Rapid Testing
-
-The application features a modern **Start Page & Login Dialog** (`LoginForm`) with **1-click quick login cards** for instant evaluation across 5 business roles:
-
-| Role | Username | Default Password | Quick 4-Digit PIN | Access Scope & Responsibilities |
-| :--- | :--- | :--- | :--- | :--- |
-| **Адміністратор (Admin)** | `admin` | `admin123` | `1111` | Повний доступ до всіх модулів, BI-аналітика ScottPlot, аудит-журнали Serilog. |
-| **Офіціант (Waiter)** | `waiter` | `waiter123` | `2222` | Інтерактивна карта залів, створення замовлень, touch-нумпад, закриття чеків. |
-| **Рецепція (Receptionist)** | `reception` | `hotel123` | `3333` | Стійка реєстрації, 2D календарна шахівниця (Room Rack), поселення гостей. |
-| **Шеф-кухар (Chef)** | `chef` | `chef123` | `4444` | Кухонний монітор (KDS), таймери приготування, аудіо-оповіщення страв. |
-| **Менеджер складу (Store)** | `store` | `store123` | `5555` | Баланси залишків, контроль дефіциту, оприбуткування через модальне вікно. |
-
-### Employee Registration
-Users can also switch to the **"Реєстрація"** tab to create custom employee accounts. The registration workflow uses:
-- FluentValidation validation (`RegisterUserRequestValidator`) enforcing 4-digit PIN masks and minimum length rules.
-- SHA-256 salted password hashing (`PasswordHelper`).
-- Direct database persistence in PostgreSQL or SQLite.
-
+Повний опис типів полів, зовнішніх ключів, унікальних індексів та стратегій міграцій наведено у [Docs/DATABASE_SCHEMA.md](Docs/DATABASE_SCHEMA.md).
 
 ---
 
-## Windows Forms Components Reference
+## 👥 Демонстраційні ролі та система авторизації
 
-Every core Windows Forms component is utilized in a realistic, production-ready scenario:
+У застосунку реалізовано інтерактивний стартовий екран входу ([`LoginForm`](file:///src/HoReCa.WinForms/Forms/LoginForm.cs)) з підтримкою швидкого перемикання 5 корпоративних ролей в один клік, введення 4-значного PIN-коду та повноцінної реєстрації нових співробітників:
 
-| Component | HoReCa Module | Implementation & Pedagogical Purpose |
+| Роль | Логін | Пароль за замовчуванням | Швидкий PIN | Область доступу та обов'язки |
+| :--- | :--- | :--- | :---: | :--- |
+| 👑 **Керівник / Адміністратор** | `admin` | `admin123` | `1111` | Необмежений доступ до всіх модулів, ScottPlot BI-аналітика, аудит-журнал Serilog, зміна конфігурації. |
+| 🍽 **Офіціант залу** | `waiter` | `waiter123` | `2222` | Інтерактивна карта залів (Drag-and-Drop), вибір страв із зображеннями, відкриття та розрахунок замовлень. |
+| 🛎 **Адміністратор рецепції** | `reception` | `hotel123` | `3333` | Стійка реєстрації гостей, 2D календарна шахматка номерного фонду (Room Rack), поселення / виселення. |
+| 👨‍🍳 **Шеф-кухар / Гарячий цех** | `chef` | `chef123` | `4444` | Кухонний монітор (KDS), динамічні таймери запізнення страв, звукові сповіщення про нові замовлення. |
+| 📦 **Менеджер складу** | `store` | `store123` | `5555` | Моніторинг залишків на складі, підсвічування дефіцитних інгредієнтів, модальне оприбуткування партій. |
+
+---
+
+## 🎛 Використання компонентів Windows Forms
+
+Проєкт спроєктований як фундаментальний підручник з практичного застосування стандартних та кастомних компонентів Windows Forms у складних високонавантажених сценаріях:
+
+| Компонент WinForms | Модуль застосування | Архітектурне призначення та особливості реалізації |
 | :--- | :--- | :--- |
-| `DataGridView` | POS Terminal & Inventory | AutoGenerateColumns = false, FullRowSelect, custom CellPainting for low-stock badges. |
-| `TreeView` | System Navigation | Hierarchical view of hotel floors, rooms, and restaurant zones. |
-| `ListView` (TileView) | Hotel Front-Desk | High-DPI room card tiles displaying room category, price, and status. |
-| `FlowLayoutPanel` | Kitchen Display (KDS) & Catalog | Responsive wrapping for KDS order tickets and menu dish cards. |
-| `TableLayoutPanel` | Touch Cashier Numpad | Proportional 4x4 grid layout with quick-cash denomination buttons. |
-| `SplitContainer` | POS Terminal Layout | Resizable splitter between interactive floor plan and active order details. |
-| `MenuStrip` | Application Header | Top-level menu shortcuts, database switching, and diagnostic triggers. |
-| `ToolStrip` | Floor Plan Actions | Action bar for toggling "Edit Layout", zooming, and filtering table zones. |
-| `StatusStrip` | Shell Footer | Live system clock, database connectivity indicator, and managed memory monitor. |
-| `ContextMenuStrip` | Interactive Tables & Rooms | Right-click context menus to create orders, change statuses, or inspect bookings. |
-| `ErrorProvider` | Modal Dialogs | Non-blinking validation error alerts integrated with FluentValidation. |
-| `MaskedTextBox` | New Booking Dialog | Structured input mask for Ukrainian phone numbers (`+38 (000) 000-00-00`). |
-| `DateTimePicker` | Front Desk & Reservations | Date selection constrained to future dates with cross-field range validation. |
-| `LoginForm` | Start Page & Authentication | 1-click role switcher cards, PIN-based rapid login, user registration workflow. |
-| `PrintDocument` | Fiscal Subsystem | GDI+ 80mm thermal receipt rendering, page layout, and fiscal text generation. |
-| `PrintPreviewDialog` | Payment Dialog | Preview thermal receipts before sending to physical hardware. |
-| `RichTextBox` | Real-Time Diagnostics | Thread-safe Serilog sink target with ANSI LogLevel color-coding. |
-| `ScottPlot.WinForms` | Executive Analytics | Hardware-accelerated 7-day revenue bar charts and KPI metrics. |
-| `System.Windows.Forms.Timer` | KDS & Shell | Live ticket elapsed duration calculation and status bar clock updates. |
+| `DataGridView` | POS-термінал, Склад | `AutoGenerateColumns = false`, `FullRowSelect`, кастомна подія `CellPainting` для малювання кольорових бейджів дефіциту залишків. |
+| `FlowLayoutPanel` | Кухонний монітор (KDS), Меню | Автоматичне плиточне перетікання та адаптивне розміщення карток замовлень і страв меню. |
+| `TableLayoutPanel` | Сенсорний касовий нумпад | Відсоткова пропорційна сітка 4×4 із підтримкою великих сенсорних кнопок та купюр швидкої оплати. |
+| `SplitContainer` | POS-термінал, Склад | Гнучкий розділювач між схемою залу ресторану та вмістом поточного відкритого замовлення. |
+| `ListView` (TileView) | Стійка рецепції готелю | Високопродуктивне плиточне відображення номерного фонду з кольоровим кодуванням статусу прибирання та зайнятості. |
+| `TreeView` | Навігація готелю | Ієрархічне дерево поверхів, категорій номерів та ресторанних залів. |
+| `PrintDocument` & GDI+ | Фіскальний чекодрук | Точне векторне піксельне малювання термочека стандарту 80 мм з моноширинними колонками, штрихкодом та QR-кодом. |
+| `PrintPreviewDialog` | Касовий розрахунок | Модальне вікно попереднього перегляду чека перед фізичним виведенням на принтер. |
+| `ErrorProvider` | Модальні діалоги | Візуалізація помилок валідації без мерехтіння на базі правил `FluentValidation`. |
+| `MaskedTextBox` | Діалог бронювання | Жорстка маска введення номерів телефонів України (`+38 (000) 000-00-00`). |
+| `DateTimePicker` | Календар рецепції | Обмеження діапазону вибору дат, автоматична валідація тривалості проживання. |
+| `StatusStrip` & `ToolStrip` | Головна оболонка | Індикація стану підключення до БД, монітор виділеної оперативної пам'яті (GC Heap) та системний годинник. |
+| `RichTextBox` | Термінал діагностики | Безпечний для потоків Serilog Sink (`BeginInvoke`) із підсвічуванням рівня логування різними кольорами. |
+| `ScottPlot.WinForms` | Панель аналітики | Апаратно прискорені інтерактивні графіки доходів, активності офіціантів, популярності страв та завантаженості столиків. |
+| `System.Windows.Forms.Timer` | KDS та Оболонка | Секундні таймери перерахунку тривалості приготування страв та оновлення статусного рядка. |
 
 ---
 
-## Solution Structure
+## 📂 Структура проєкту та вихідний код
 
 ```
 WinForms-HoReCa-Mastery/
-├── WinForms-HoReCa-Mastery.slnx          # Solution file (.NET 10 slnx format)
+├── WinForms-HoReCa-Mastery.slnx             # Файл рішення (.NET 10 slnx format)
 ├── src/
-│   ├── HoReCa.Domain/                    # Domain Layer: Entities & Enums
-│   │   ├── Common/BaseEntity.cs
-│   │   ├── Enums/DomainEnums.cs
+│   ├── HoReCa.Domain/                       # Шар ядра доменної моделі
+│   │   ├── Common/BaseEntity.cs             # Базовий клас з аудитом дат (CreatedAt/UpdatedAt)
+│   │   ├── Enums/DomainEnums.cs             # Статуси замовлень, номери, типи оплати
 │   │   └── Entities/
-│   │       ├── HotelEntities.cs
-│   │       ├── RestaurantEntities.cs
-│   │       └── InventoryAndPaymentEntities.cs
-│   ├── HoReCa.Application/               # Application Layer: DTOs, Validators, Interfaces
-│   │   ├── DTOs/ApplicationDtos.cs
-│   │   ├── Validators/Validators.cs
-│   │   └── Interfaces/ApplicationInterfaces.cs
-│   ├── HoReCa.Infrastructure/            # Infrastructure: EF Core, PostgreSQL, SQLite, Seeder
-│   │   ├── Persistence/HoReCaDbContext.cs
-│   │   ├── Persistence/DbSeeder.cs
+│   │       ├── HotelEntities.cs             # Room, Guest, RoomBooking
+│   │       ├── RestaurantEntities.cs        # RestaurantTable, TableZone, MenuItem, Order, OrderItem
+│   │       └── InventoryAndPaymentEntities.cs # InventoryItem, Payment, UserAccount
+│   ├── HoReCa.Application/                  # Шар прикладної бізнес-логіки
+│   │   ├── DTOs/ApplicationDtos.cs          # Запити, відповіді, моделі списків
+│   │   ├── Validators/Validators.cs         # FluentValidation-валідатори (Order, Booking, User)
+│   │   └── Interfaces/ApplicationInterfaces.cs # Контракти сервісів та фабрик
+│   ├── HoReCa.Infrastructure/               # Шар доступу до даних та зовнішніх служб
+│   │   ├── Persistence/HoReCaDbContext.cs   # EF Core 10 DbContext з підтримкою PG/SQLite
+│   │   ├── Persistence/DbSeeder.cs          # Генератор реалістичних тестових даних (Bogus)
 │   │   └── Services/
-│   │       ├── TablePosService.cs
-│   │       ├── RoomBookingService.cs
-│   │       ├── AdditionalServices.cs
-│   │       └── ReceiptTextFormatter.cs
-│   └── HoReCa.WinForms/                  # Presentation Layer: WinForms, Host, Controls, Forms
-│       ├── Common/ThemePalette.cs
-│       ├── Common/BaseForm.cs
-│       ├── Diagnostics/SerilogRichTextBoxSink.cs
-│       ├── Printing/ReceiptPrinterEngine.cs
+│   │       ├── TablePosService.cs           # Обслуговування столів, відкриття/закриття чеків
+│   │       ├── RoomBookingService.cs        # Бронювання номерів, перевірка перетину дат
+│   │       ├── AdditionalServices.cs        # Складські операції, меню, авторизація
+│   │       └── ReceiptTextFormatter.cs      # Моноширинне форматування чека 80 мм (ESC/POS)
+│   └── HoReCa.WinForms/                     # Шар інтерфейсу користувача (Windows Forms)
+│       ├── Common/ThemePalette.cs           # Єдина палітра кольорів та шрифтів (Dark Luxe Theme)
+│       ├── Common/BaseForm.cs               # Базова форма з утилітами безпечного виклику Invoke
+│       ├── Diagnostics/SerilogRichTextBoxSink.cs # Кастомний потік логів у RichTextBox
+│       ├── Printing/ReceiptPrinterEngine.cs # GDI+ рендерер термочека 80 мм для PrintDocument
 │       ├── Controls/
-│       │   ├── FloorTableWidget.cs
-│       │   ├── DishCardControl.cs
-│       │   ├── RoomRackControl.cs
-│       │   ├── CashierNumpadControl.cs
-│       │   └── KitchenTicketControl.cs
+│       │   ├── FloorTableWidget.cs          # Кастомний інтерактивний віджет столу з Drag-and-Drop
+│       │   ├── DishCardControl.cs           # Плитка страви меню з фото, ціною та бейджем
+│       │   ├── RoomRackControl.cs           # 2D шахматка номерного фонду (GDI+ OwnerDraw)
+│       │   ├── CashierNumpadControl.cs      # Сенсорний цифровий блок касира з швидкими банкнотами
+│       │   └── KitchenTicketControl.cs      # Картка замовлення KDS з кольоровим таймером
 │       ├── Forms/
-│       │   ├── MainShellForm.cs
-│       │   ├── PosTerminalForm.cs
-│       │   ├── HotelFrontDeskForm.cs
-│       │   ├── KitchenDisplayForm.cs
-│       │   ├── InventoryForm.cs
-│       │   ├── AnalyticsForm.cs
-│       │   ├── PaymentDialogForm.cs
-│       │   ├── NewBookingDialogForm.cs
-│       │   └── LogsViewerForm.cs
-│       ├── appsettings.json
-│       └── Program.cs
+│       │   ├── MainShellForm.cs             # Головне MDI/SDI вікно з боковою панеллю
+│       │   ├── WelcomeStartForm.cs          # Вітальний екран із золотим гербом ресторану
+│       │   ├── LoginForm.cs                 # Форма авторизації з PIN-кодом та ролями
+│       │   ├── PosTerminalForm.cs           # Робоче місце офіціанта (Зали, Меню, Чек)
+│       │   ├── HotelFrontDeskForm.cs        # Модуль рецепції готелю та поселення
+│       │   ├── KitchenDisplayForm.cs        # Монітор кухаря (KDS) зі звуковим сповіщенням
+│       │   ├── InventoryForm.cs             # Облік залишків на складі та оприбуткування
+│       │   ├── AnalyticsForm.cs             # Інтерактивна ScottPlot-аналітика продажів
+│       │   ├── PaymentDialogForm.cs         # Касове вікно розрахунку, решти та друку чека
+│       │   ├── NewBookingDialogForm.cs      # Модальне вікно броні з масками та валідацією
+│       │   └── LogsViewerForm.cs            # Вікно системного журналу подій у реальному часі
+│       ├── appsettings.json                 # Конфігурація підключень до БД та логування
+│       └── Program.cs                       # Точка входу: Generic Host, DI, ініціалізація теми
 ├── tests/
-│   └── HoReCa.Tests/                     # Automated Test Suite (16 Tests)
-│       ├── UnitTests/
-│       │   ├── OrderServiceTests.cs
-│       │   ├── BookingValidatorTests.cs
-│       │   ├── OrderValidatorTests.cs
-│       │   └── InventoryAndPrinterTests.cs
-│       └── IntegrationTests/
-│           └── TablePosServiceTests.cs
+│   └── HoReCa.Tests/                        # Автоматизовані модульні та інтеграційні тести
+│       ├── UnitTests/                       # Тести бізнес-правил, калькуляцій та валідаторів
+│       └── IntegrationTests/                # Тести сервісів на базі SQLite In-Memory
 └── Docs/
-    ├── ARCHITECTURE.md                   # Architectural deep-dive & threading model
-    ├── DATABASE_SCHEMA.md                # Full relational schema, column types & indexes
-    └── Lessons/                          # 20-lesson step-by-step master course
-        ├── 01-generic-host-and-di.md
-        ├── 02-dual-database-persistence.md
-        ├── 03-domain-modeling-horeca.md
-        ├── 04-modern-dark-shell-navigation.md
-        ├── 05-interactive-floor-plan-drag-drop.md
-        ├── 06-pos-order-management-and-datagrid.md
-        ├── 07-touch-cashier-numpad-tablelayout.md
-        ├── 08-thermal-receipt-gdi-printdocument.md
-        ├── 09-hotel-frontdesk-matrix-roomrack.md
-        ├── 10-modal-dialogs-validation-errorprovider.md
-        ├── 11-kitchen-display-system-flowlayout-timers.md
-        ├── 12-inventory-stock-datagrid-cellpainting.md
-        ├── 13-executive-analytics-scottplot-charts.md
-        ├── 14-threadsafe-serilog-sink-richtextbox.md
-        ├── 15-unit-testing-business-logic.md
-        ├── 16-integration-testing-sqlite-inmemory.md
-        ├── 17-asynchronous-ui-and-background-tasks.md
-        ├── 18-custom-ownerdraw-and-flicker-free-gdi.md
-        ├── 19-configuration-options-appsettings.md
-        └── 20-production-deployment-and-packaging.md
+    ├── ARCHITECTURE.md                      # Детальний архітектурний посібник (STA, GDI, потоки)
+    ├── DATABASE_SCHEMA.md                   # Специфікація таблиць БД, типів полів та індексів
+    └── Lessons/                             # 20 структурованих теоретико-практичних гайдів
 ```
 
 ---
 
-## Step-by-Step Educational Curriculum
+## 📚 Навчальний курс: 20 покрокових уроків
 
-| Lesson | Title | Core Competencies |
-| :---: | :--- | :--- |
-| **01** | [Generic Host & Dependency Injection](Docs/Lessons/01-generic-host-and-di.md) | `IHostBuilder`, ServiceCollection, DI lifetimes, `ApplicationConfiguration.Initialize()`. |
-| **02** | [Dual-Database Persistence](Docs/Lessons/02-dual-database-persistence.md) | EF Core 10, Npgsql (PostgreSQL), SQLite fallback, `IDbContextFactory` in desktop apps. |
-| **03** | [Domain Modeling & Encapsulation](Docs/Lessons/03-domain-modeling-horeca.md) | Rich entities, DDD aggregates, invariant validation, monetary calculations. |
-| **04** | [Modern Dark Shell & Navigation](Docs/Lessons/04-modern-dark-shell-navigation.md) | TopLevel = false form hosting, slate palette, system status bar, live timer clock. |
-| **05** | [Interactive Floor Plan Drag & Drop](Docs/Lessons/05-interactive-floor-plan-drag-drop.md) | Custom UserControl, MouseDown/Move/Up coordinate math, persistent layouts. |
-| **06** | [POS Order Management & DataGridView](Docs/Lessons/06-pos-order-management-and-datagrid.md) | `BindingList<T>`, DataGridView column definitions, real-time total updates. |
-| **07** | [Touch-Friendly Cashier Numpad](Docs/Lessons/07-touch-cashier-numpad-tablelayout.md) | `TableLayoutPanel` percentage grid, touch-friendly dimensions, quick cash buttons. |
-| **08** | [Thermal Receipt Printing & GDI+](Docs/Lessons/08-thermal-receipt-gdi-printdocument.md) | `PrintDocument`, `PrintPreviewDialog`, font metrics, fixed-width 40-col formatting. |
-| **09** | [Hotel Front-Desk & Room Rack Matrix](Docs/Lessons/09-hotel-frontdesk-matrix-roomrack.md) | 2D calendar matrix, `ListView` TileView, room reservation state indicators. |
-| **10** | [Modal Dialogs & ErrorProvider Validation](Docs/Lessons/10-modal-dialogs-validation-errorprovider.md) | `MaskedTextBox`, `DateTimePicker`, `ErrorProvider`, FluentValidation integration. |
-| **11** | [Kitchen Display System (KDS)](Docs/Lessons/11-kitchen-display-system-flowlayout-timers.md) | `FlowLayoutPanel`, live order cards, elapsed time alerts, acoustic notifications. |
-| **12** | [Inventory Management & CellPainting](Docs/Lessons/12-inventory-stock-datagrid-cellpainting.md) | DataGridView `CellPainting`, rounded status badges, stock deficiency warnings. |
-| **13** | [Executive Analytics with ScottPlot 5](Docs/Lessons/13-executive-analytics-scottplot-charts.md) | High-performance charting, dark-themed revenue bar plots, KPI summary cards. |
-| **14** | [Thread-Safe Serilog RichTextBox Sink](Docs/Lessons/14-threadsafe-serilog-sink-richtextbox.md) | Custom `ILogEventSink`, cross-thread UI dispatching via `BeginInvoke`, color logs. |
-| **15** | [Unit Testing Business Logic](Docs/Lessons/15-unit-testing-business-logic.md) | xUnit, FluentAssertions, FluentValidation `TestHelper`, domain calculation tests. |
-| **16** | [Integration Testing with SQLite In-Memory](Docs/Lessons/16-integration-testing-sqlite-inmemory.md) | In-memory relational database testing, transaction isolation, service testing. |
-| **17** | [Asynchronous UI Patterns & Deadlocks](Docs/Lessons/17-asynchronous-ui-and-background-tasks.md) | Avoiding `.Result` deadlocks, non-blocking UI thread, `CancellationToken` support. |
-| **18** | [Custom OwnerDraw & Flicker-Free GDI+](Docs/Lessons/18-custom-ownerdraw-and-flicker-free-gdi.md) | `ControlStyles.OptimizedDoubleBuffer`, anti-aliased graphics, reflection buffering. |
-| **19** | [Configuration & Options Binding](Docs/Lessons/19-configuration-options-appsettings.md) | `appsettings.json`, `IOptions<T>`, strongly-typed enterprise settings. |
-| **20** | [Production Packaging & Self-Contained Deployment](Docs/Lessons/20-production-deployment-and-packaging.md) | Single-file publish, native dependencies, self-contained deployment. |
+Кожен урок оформлений як фундаментальний підручник із теоретичним вступом, архітектурними схемами, аналізом підводних каменів, лістингами коду та чек-листом для самоперевірки:
+
+| № | Назва уроку та пряме посилання | Основні теми та освоєні технології |
+| :-: | :--- | :--- |
+| **01** | [Microsoft Generic Host та Dependency Injection у WinForms](Docs/Lessons/01-generic-host-and-di.md) | `IHostBuilder`, `ServiceCollection`, життєві цикли `Scoped`/`Transient`/`Singleton`, безпечний старт `ApplicationConfiguration.Initialize()`. |
+| **02** | [Гібридна персистентність: PostgreSQL та офлайн-фолбек на SQLite](Docs/Lessons/02-dual-database-persistence.md) | `IDbContextFactory`, `Npgsql`, підключення пулу з'єднань, автоматичний офлайн-фолбек на локальну SQLite базу. |
+| **03** | [Моделювання предметної області HoReCa за принципами DDD](Docs/Lessons/03-domain-modeling-horeca.md) | Доменні сутності, агрегати, захист інваріантів, грошові типи `decimal`, відсутність аналітики в UI. |
+| **04** | [Сучасний Dark Shell та модульна навігація без MDI](Docs/Lessons/04-modern-dark-shell-navigation.md) | Впровадження дочірніх форм через `TopLevel = false`, палітра `ThemePalette`, статусний рядок, таймер годинника. |
+| **05** | [Інтерактивна схема залу ресторану з Drag-and-Drop](Docs/Lessons/05-interactive-floor-plan-drag-drop.md) | Кастомний `FloorTableWidget`, координатна математика `MouseDown/MouseMove/MouseUp`, збереження координат у БД. |
+| **06** | [Керування замовленнями у POS-терміналі та оптимізація DataGridView](Docs/Lessons/06-pos-order-management-and-datagrid.md) | `BindingList<T>`, прив'язка даних, миттєвий підрахунок знижок, чайових та ПДВ, блокування колонок. |
+| **07** | [Сенсорний цифровий блок касира на базі TableLayoutPanel](Docs/Lessons/07-touch-cashier-numpad-tablelayout.md) | Пропорційна сітка `TableLayoutPanel`, захист від помилок введення, сенсорні купюри швидкої оплати. |
+| **08** | [Друк термочеків стандарту 80 мм засобами GDI+ та PrintDocument](Docs/Lessons/08-thermal-receipt-gdi-printdocument.md) | `PrintDocument`, `Graphics.DrawString`, моноширинні шрифти, пагінація, розрахунок висоти, штрихкоди. |
+| **09** | [Стійка рецепції готелю та 2D-шахматка номерного фонду (Room Rack)](Docs/Lessons/09-hotel-frontdesk-matrix-roomrack.md) | Кастомна матриця номерів, кольорове кодування статусів (вільний, зайнятий, бронь, прибирання), `ListView` TileView. |
+| **10** | [Модальні діалоги, маски введення та валідація через ErrorProvider](Docs/Lessons/10-modal-dialogs-validation-errorprovider.md) | `MaskedTextBox`, `DateTimePicker`, безшовна інтеграція з `FluentValidation`, валідація діапазонів без блокування. |
+| **11** | [Кухонний монітор (KDS) на базі FlowLayoutPanel та динамічні таймери](Docs/Lessons/11-kitchen-display-system-flowlayout-timers.md) | Картки замовлень `KitchenTicketControl`, кольорова градація запізнення, звуковий сигнал `SystemSounds.Exclamation`. |
+| **12** | [Складський облік та візуалізація залишків через DataGridView.CellPainting](Docs/Lessons/12-inventory-stock-datagrid-cellpainting.md) | Векторне перемальовування клітинок таблиці, заокруглені кольорові бейджі критичних залишків, захист від витоків пензлів GDI+. |
+| **13** | [Управлінська аналітика та BI-дашборди на базі ScottPlot 5](Docs/Lessons/13-executive-analytics-scottplot-charts.md) | Апаратно прискорені бар-чарти, темна тема ScottPlot 5, фільтри за виручкою, офіціантами, столиками та стравами. |
+| **14** | [Потокобезпечний Serilog Sink для RichTextBox у реальному часі](Docs/Lessons/14-threadsafe-serilog-sink-richtextbox.md) | Реалізація `ILogEventSink`, асинхронне перенаправлення логів у UI через `BeginInvoke`, кольорове форматування рівнів. |
+| **15** | [Модульне тестування доменної логіки засобами xUnit та FluentAssertions](Docs/Lessons/15-unit-testing-business-logic.md) | Тестування розрахунку підсумків замовлень, валідаторів номерів телефонів та дат проживання без залежності від БД. |
+| **16** | [Інтеграційне тестування бізнес-сервісів із SQLite In-Memory](Docs/Lessons/16-integration-testing-sqlite-inmemory.md) | Ізольоване in-memory середовище бази даних, перевірка транзакційності сервісів столів, броней та чеків. |
+| **17** | [Асинхронні патерни в UI: уникнення дедлоків та фонові задачі](Docs/Lessons/17-asynchronous-ui-and-background-tasks.md) | Патерни `async/await` у WinForms, уникнення блокуючих викликів `.Result` / `.Wait()`, індикація завантаження через `ProgressBar`. |
+| **18** | [Кастомне малювання без мерехтіння (Double Buffering) та GDI+](Docs/Lessons/18-custom-ownerdraw-and-flicker-free-gdi.md) | `ControlStyles.OptimizedDoubleBuffer`, правильне використання `GraphicsPath`, детерміноване звільнення `IDisposable` ресурсів. |
+| **19** | [Конфігурація застосунку через appsettings.json та IOptions](Docs/Lessons/19-configuration-options-appsettings.md) | Ієрархічні налаштування принтерів, податкових ставок та тайм-аутів з підтримкою валідації конфігурації. |
+| **20** | [Підготовка до продакшну, Single-File Publish та дистрибуція](Docs/Lessons/20-production-deployment-and-packaging.md) | Самодостатній реліз (`Self-Contained Single-File`), оптимізація розміру дистрибутива, налаштування Inno Setup інсталятора. |
 
 ---
 
-## Quick Start Guide
+## 🚀 Інструкція зі встановлення та запуску
 
-### Prerequisites
-- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) (or later)
-- Windows 10 / 11 (64-bit)
-- (Optional) PostgreSQL 15+ if testing central server mode (SQLite runs automatically out of the box).
+### Системні вимоги
+- Операційна система: **Windows 10 / 11** (x64 / ARM64).
+- Середовище виконання: [.NET 10.0 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) або новіше.
+- (Опційно) Встановлений **PostgreSQL 15+**, якщо планується тестування клієнт-серверного кластера. Якщо PostgreSQL відсутній, застосунок за замовчуванням автоматично розгорне локальну базу даних SQLite.
 
-### 1. Clone the Repository
+### 1. Клонування репозиторію
 ```bash
 git clone https://github.com/MrTomkaYurii/WinForms-HoReCa-Mastery.git
 cd WinForms-HoReCa-Mastery
 ```
 
-### 2. Run Automated Unit & Integration Tests
+### 2. Запуск автоматизованих тестів
+Перед запуском графічного інтерфейсу переконайтеся, що всі 30 тестів проходять успішно:
 ```bash
 dotnet test
 ```
 
-### 3. Launch the Application
+### 3. Запуск застосунку
 ```bash
 dotnet run --project src/HoReCa.WinForms/HoReCa.WinForms.csproj
 ```
-On first launch, the application will automatically create `horeca_mastery.db` (if PostgreSQL is not configured) and seed realistic tables, rooms, categories, menu items, and inventory items.
+Під час першого запуску спрацює автоматичний сідер даних [`DbSeeder`](file:///src/HoReCa.Infrastructure/Persistence/DbSeeder.cs), який наповнить систему:
+- Залами ресторану (Основний зал, Тераса, VIP-зал) та розставленими столиками.
+- Каталогом страв і напоїв із реальними цінами та зображеннями.
+- Номерним фондом готелю (Люкс, Напівлюкс, Стандарт) та поточними бронюваннями.
+- Складськими запасами інгредієнтів.
 
 ---
 
-## License
+## 🧪 Тестування та контроль якості
 
-This project is open-source and available under the **MIT License**.
+Проєкт містить повний набір модульних та інтеграційних тестів у проєкті [`HoReCa.Tests`](file:///tests/HoReCa.Tests/HoReCa.Tests.csproj):
+- **UnitTests**:
+  - `OrderServiceTests` — математика розрахунку знижок, чайових та підсумкових сум чеків.
+  - `BookingValidatorTests` — перевірка валідності номерів телефонів, ПІБ гостей та коректності дат заїзду/виїзду.
+  - `OrderValidatorTests` — валідація рядків замовлення та мінімальних лімітів.
+  - `InventoryAndPrinterTests` — перевірка логіки списання залишків та форматування текстових чеків.
+- **IntegrationTests**:
+  - `TablePosServiceTests` — перевірка зміни статусів столів та додавання замовлень із реальною реляційною БД в пам'яті (SQLite In-Memory).
+
+---
+
+## 📜 Ліцензія
+
+Проєкт поширюється під відкритою ліцензією **MIT License**. Ви можете вільно використовувати вихідний код у навчальних, дослідницьких та комерційних цілях.
