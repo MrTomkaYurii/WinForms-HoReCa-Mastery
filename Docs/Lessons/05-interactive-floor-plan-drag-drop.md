@@ -1,129 +1,96 @@
-# Lesson 05: Interactive Floor Plan & Drag-and-Drop Mechanics
+# Практичний гайд 05: Інтерактивна карта залів ресторану (Floor Plan) та розрахунок безпечної геометрії
 
-## 1. Overview
+## 1. Теоретична база та інженерний виклик
 
-In restaurant management, managers need the freedom to re-arrange physical tables to mirror the dining room layout. This lesson demonstrates how to build an interactive 2D canvas with draggable custom user controls and coordinate persistence.
+У ресторанах розташування столиків динамічно змінюється (банкетна розстановка, додавання літнього майданчика, злиття столів). Простий список столів у випадаючому списку є вкрай незручним для офіціантів під час запари. Необхідна **інтерактивна візуальна схема зали (Floor Plan)**.
+
+При реалізації віджетів столів у WinForms виникають дві критичні математичні та графічні задачі:
+1. **Проблема перекриття (Collision):** Столики з різних залів або при початковій генерації не повинні накладатися один на одного.
+2. **Проблема вилізання тексту за межі круглих столів:** Оскільки текст малюється у прямокутних межах (`Rectangle`), на круглих столах кути прямокутника виходять за окружність, спричиняючи візуальне псування інтерфейсу.
 
 ---
 
-## 2. The Custom FloorTableWidget Control
+## 2. Математика безпечного вписування прямокутника в коло
 
-Each table on the floor plan is rendered by `FloorTableWidget`, a custom `UserControl` that supports:
-- Circular or rectangular shapes based on `TableShape`.
-- Color status indication: Green (Free), Amber (Occupied), Cyan (Bill Requested), Blue (Reserved).
-- Drag-and-drop movement when in "Edit Layout" mode.
-- Click selection for opening active orders.
+Для кола діаметром $D$ та радіусом $R = \frac{D}{2}$, довжина хорди на відстані $Y$ від центру визначається теоремою Піфагора. Щоб гарантувати, що блок тексту з відступами повністю поміщається всередині кола, прямокутник тексту обмежується відступом:
+$$\text{Safe Inset} = 0.16 \times D$$
 
 ```mermaid
-stateDiagram-v2
-    [*] --> Idle
-    Idle --> Dragging : MouseDown (in Edit Mode)
-    Dragging --> Dragging : MouseMove (Delta X/Y)
-    Dragging --> Dropped : MouseUp
-    Dropped --> Persisting : Save Coordinates via Service
-    Persisting --> Idle : Persisted
+flowchart TD
+    Circle["Круглий віджет столика (Діаметр D = 110px)"] --> Inset["Розрахунок відступу: inset = 0.16 * D (~18px)"]
+    Inset --> SafeRect["Безпечний внутрішній прямокутник safeRect<br/>(W = D - 2*inset, H = D - 2*inset)"]
+    SafeRect --> Partition["Вертикальний поділ зони малювання"]
+    Partition --> L1["Рядок 1: Номер столу (Top, Height = 24px, Bold)"]
+    Partition --> L2["Рядок 2: Назва зони (Center, Height = 18px, Ellipsis)"]
+    Partition --> L3["Рядок 3: К-сть місць / Сума чека (Bottom, Height = 20px)"]
+    L1 & L2 & L3 --> Guaranteed["Гарантія: Жодна літера не торкається межі кола"]
 ```
 
 ---
 
-## 3. Implementing Drag Mechanics
+## 3. Детальний розбір реалізації в проєкті
 
-```csharp
-public partial class FloorTableWidget : UserControl
-{
-    private bool _isDragging;
-    private Point _dragStartPoint;
-    public bool EditModeEnabled { get; set; }
+### 3.1. Кастомний віджет столика: [`FloorTableWidget.cs`](file:///C:/Users/Yurii/source/repos/- MASTERY/WinForms-HoReCa-Mastery/src/HoReCa.WinForms/Controls/FloorTableWidget.cs)
 
-    public event EventHandler<Point>? PositionChanged;
-
-    protected override void OnMouseDown(MouseEventArgs e)
-    {
-        base.OnMouseDown(e);
-        if (e.Button == MouseButtons.Left && EditModeEnabled)
-        {
-            _isDragging = true;
-            _dragStartPoint = e.Location;
-            BringToFront();
-        }
-    }
-
-    protected override void OnMouseMove(MouseEventArgs e)
-    {
-        base.OnMouseMove(e);
-        if (_isDragging)
-        {
-            var deltaX = e.X - _dragStartPoint.X;
-            var deltaY = e.Y - _dragStartPoint.Y;
-
-            Left = Math.Max(0, Left + deltaX);
-            Top = Math.Max(0, Top + deltaY);
-        }
-    }
-
-    protected override void OnMouseUp(MouseEventArgs e)
-    {
-        base.OnMouseUp(e);
-        if (_isDragging)
-        {
-            _isDragging = false;
-            PositionChanged?.Invoke(this, Location);
-        }
-    }
-}
-```
-
----
-
-## 4. Custom GDI+ Rendering with Anti-Aliasing
+У методі `OnPaint` віджета [`FloorTableWidget`](file:///C:/Users/Yurii/source/repos/- MASTERY/WinForms-HoReCa-Mastery/src/HoReCa.WinForms/Controls/FloorTableWidget.cs) застосовано розрахунок безпечної геометрії та згладжування GDI+:
 
 ```csharp
 protected override void OnPaint(PaintEventArgs e)
 {
+    base.OnPaint(e);
     var g = e.Graphics;
     g.SmoothingMode = SmoothingMode.AntiAlias;
+    g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
 
-    var rect = new Rectangle(2, 2, Width - 5, Height - 5);
-    using var brush = new SolidBrush(GetStatusColor(Table.Status));
-    using var pen = new Pen(Color.FromArgb(200, 255, 255, 255), 2);
-
-    if (Table.Shape == TableShape.Round)
+    Rectangle safeRect;
+    if (Shape == TableShape.Round)
     {
-        g.FillEllipse(brush, rect);
-        g.DrawEllipse(pen, rect);
+        int insetX = (int)(Width * 0.16f);
+        int insetY = (int)(Height * 0.16f);
+        safeRect = new Rectangle(insetX, insetY, Width - 2 * insetX, Height - 2 * insetY);
     }
     else
     {
-        g.FillRectangle(brush, rect);
-        g.DrawRectangle(pen, rect);
+        safeRect = new Rectangle(10, 8, Width - 20, Height - 16);
     }
 
-    // Draw Table Number and Capacity
-    var text = $"№ {Table.TableNumber}\n({Table.Capacity} місць)";
-    using var font = new Font("Segoe UI", 9, FontStyle.Bold);
-    using var textBrush = new SolidBrush(Color.White);
-    var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
-    g.DrawString(text, font, textBrush, rect, sf);
+    // Відмальовка форми (коло або закруглений прямокутник)
+    using var bgBrush = new SolidBrush(GetStatusColor(Status));
+    using var borderPen = new Pen(IsSelected ? Color.White : ThemePalette.BorderLight, IsSelected ? 2.5f : 1.2f);
+
+    if (Shape == TableShape.Round)
+    {
+        g.FillEllipse(bgBrush, 2, 2, Width - 5, Height - 5);
+        g.DrawEllipse(borderPen, 2, 2, Width - 5, Height - 5);
+    }
+    else
+    {
+        DrawRoundedRectangle(g, new Rectangle(2, 2, Width - 5, Height - 5), 8, bgBrush, borderPen);
+    }
+
+    // Текстовий рендеринг строго всередині safeRect
+    DrawTableText(g, safeRect);
 }
 ```
 
+### 3.2. Просторовий розподіл столів: [`DbSeeder.cs`](file:///C:/Users/Yurii/source/repos/- MASTERY/WinForms-HoReCa-Mastery/src/HoReCa.Infrastructure/Persistence/DbSeeder.cs)
+
+Щоб столики різних залів не накладалися в режимі «Всі зали», полотно розділене на просторові сектори:
+- **Основний зал (Столи 1–8):** Лівий сектор ($X: 40 \dots 480$, $Y: 40 \dots 185$).
+- **Літня тераса (Столи 11–16):** Правий сектор ($X: 660 \dots 960$, $Y: 40 \dots 185$).
+- **VIP Лаундж (Столи 21–22):** Нижня лаундж-зона ($X: 200 \dots 440$, $Y: 320 \dots 330$).
+
 ---
 
-## 5. Persistence via Asynchronous Application Service
+## 4. Підводні камені та типові помилки
 
-When dragging completes, the parent form catches `PositionChanged` and informs `ITablePosService`:
+> [!TIP]
+> **Плавний Drag-and-Drop без затримок:**
+> При перетягуванні столика мишею оновлення координат у базі даних не слід робити на кожен піксель події `MouseMove`. Використовуйте підхід відкладеного збереження (*Debounce* або збереження у події `MouseUp`), оновлюючи на кожен рух миші лише локальні координати контрола (`Left`, `Top`).
 
-```csharp
-widget.PositionChanged += async (s, newPos) =>
-{
-    try
-    {
-        await _posService.UpdateTablePositionAsync(new UpdateTablePositionRequest(widget.Table.Id, newPos.X, newPos.Y));
-        _logger.LogInformation("Saved table {TableNumber} coordinates ({X}, {Y})", widget.Table.TableNumber, newPos.X, newPos.Y);
-    }
-    catch (Exception ex)
-    {
-        _logger.LogError(ex, "Failed to persist table coordinates");
-    }
-};
-```
+---
+
+## 5. Практичний чек-лист для закріплення
+1. [ ] Перевірити, що круглі столи мають розмір не менше 110x110 px для комфортного розміщення тексту.
+2. [ ] Переконатися, що довгі назви залів обрізаються з трьома крапками (`StringTrimming.EllipsisCharacter`).
+3. [ ] Перевірити, що статусний індикатор (зелена/червона крапка) не перекриває номер столу.

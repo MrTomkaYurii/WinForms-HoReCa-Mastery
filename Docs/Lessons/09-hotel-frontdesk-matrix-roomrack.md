@@ -1,99 +1,68 @@
-# Lesson 09: Hotel Front-Desk Matrix & Room Rack Visualization
+# Практичний гайд 09: Модуль рецепції готелю: 2D-шахівниця номерного фонду (Room Rack)
 
-## 1. Overview
+## 1. Теоретична база та завдання шахівниці
 
-Hotel Property Management Systems (PMS) depend heavily on the **Room Rack** (a 2D calendar matrix where the Y-axis lists hotel rooms and the X-axis represents calendar dates). At a glance, receptionists can identify occupancy, upcoming check-ins, vacant rooms, and room maintenance statuses.
+У готельних системах керування майном (**PMS** - *Property Management System*) базовим інструментом портьє є **Room Rack (шахівниця або шаховий календар номерного фонду)**.
+
+**Функціонал шахівниці:**
+- **Осі матриці:** По вертикалі розміщені поверхи та номери кімнат (з інформацією про категорію номера: *Standard, Superior, Suite*), по горизонталі — календарна шкала днів обраного місяця.
+- **Візуалізація зайнятості:** Кожне бронювання відображається кольоровою смугою, яка простягається від дати заїзду (`CheckInDate`) до дати виїзду (`CheckOutDate`).
+- **Швидкі операції:** Клік по вільній клітинці відкриває модальне вікно створення нової броні. Клік по зайнятому блоку дозволяє переглянути деталі гостя або здійснити Check-out.
 
 ---
 
-## 2. Room Rack Architecture
+## 2. Архітектурна схема рендерингу матриці
 
 ```mermaid
-graph LR
-    subgraph Matrix [Room Rack Control]
-        HEADER["X-Axis: Date Headers (14 - 30 days)"]
-        ROOMS["Y-Axis: Room Rows (e.g. 101, 102, 201...)"]
-        CELLS["Grid Cells: Status / Booking Bar"]
-    end
+flowchart TD
+    DataLoad["Завантаження номерів (Rooms) та бронювань за місяць (RoomBookings)"] --> MatrixInit["Ініціалізація 2D сітки: N рядків (номери) x M колонок (дні місяця)"]
+    MatrixInit --> HeaderDraw["1. Відмальовка шапки дат (1..31 число, назви днів тижня)"]
+    HeaderDraw --> RoomDraw["2. Відмальовка лівої колонки номерів кімнат та категорій"]
+    RoomDraw --> GridCells["3. Відмальовка порожніх клітинок сітки (ThemePalette.BackgroundDark)"]
+    GridCells --> LoopBookings["4. Цикл по активних бронюваннях"]
+    
+    LoopBookings --> CalcRect["Розрахунок координат прямокутника броні:<br/>X = (CheckInDay - 1) * CellWidth<br/>Width = (CheckOutDay - CheckInDay) * CellWidth<br/>Y = RoomIndex * RowHeight"]
+    CalcRect --> DrawBar["Відмальовка заокругленої плашки броні з ім'ям гостя"]
+    DrawBar --> Finish["Матриця готова до взаємодії"]
 ```
 
 ---
 
-## 3. Implementing RoomRackControl with Custom GDI+
+## 3. Детальний розбір реалізації в проєкті
 
-Rather than instantiating hundreds of nested panel controls (which causes sluggish scrolling and high GDI handle usage), `RoomRackControl` is drawn directly onto a single canvas:
+### 3.1. Форма рецепції: [`HotelFrontDeskForm.cs`](file:///C:/Users/Yurii/source/repos/- MASTERY/WinForms-HoReCa-Mastery/src/HoReCa.WinForms/Forms/HotelFrontDeskForm.cs)
+
+У формі рецепції матрицю реалізовано через високоефективний кастомний рендеринг у події `Paint`:
 
 ```csharp
-public partial class RoomRackControl : UserControl
+private void DrawRoomRackMatrix(Graphics g, Rectangle bounds)
 {
-    private List<RoomDto> _rooms = new();
-    private List<BookingDto> _bookings = new();
-    private DateTime _startDate = DateTime.Today;
-    private const int DaysCount = 14;
-    private const int RowHeight = 36;
-    private const int RoomColWidth = 110;
-    private const int DayColWidth = 55;
+    int cellWidth = 38;
+    int rowHeight = 36;
+    int headerHeight = 32;
+    int roomColWidth = 140;
 
-    public RoomRackControl()
+    // Шапка дат
+    for (int day = 1; day <= _daysInMonth; day++)
     {
-        InitializeComponent();
-        DoubleBuffered = true;
-        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer, true);
+        int x = roomColWidth + (day - 1) * cellWidth;
+        g.DrawString(day.ToString(), ThemePalette.SmallFont, Brushes.White, x + 8, 8);
     }
 
-    public void SetData(List<RoomDto> rooms, List<BookingDto> bookings, DateTime startDate)
+    // Номери та бронювання
+    for (int r = 0; r < _rooms.Count; r++)
     {
-        _rooms = rooms;
-        _bookings = bookings;
-        _startDate = startDate;
-        Invalidate();
-    }
+        int y = headerHeight + r * rowHeight;
+        var room = _rooms[r];
+        g.DrawString($"№ {room.RoomNumber} ({room.Type})", ThemePalette.BodyFont, Brushes.White, 8, y + 8);
 
-    protected override void OnPaint(PaintEventArgs e)
-    {
-        var g = e.Graphics;
-        g.Clear(ThemePalette.SurfaceDark);
-
-        // 1. Draw Date Header Row
-        for (int d = 0; d < DaysCount; d++)
+        // Пошук броней для цього номера
+        var bookings = _bookings.Where(b => b.RoomId == room.Id);
+        foreach (var b in bookings)
         {
-            var date = _startDate.AddDays(d);
-            var x = RoomColWidth + d * DayColWidth;
-            var headerRect = new Rectangle(x, 0, DayColWidth, RowHeight);
-
-            using var brush = new SolidBrush(ThemePalette.SurfaceCard);
-            g.FillRectangle(brush, headerRect);
-            g.DrawRectangle(Pens.Gray, headerRect);
-
-            var text = $"{date:dd.MM}\n{date:ddd}";
-            TextRenderer.DrawText(g, text, Font, headerRect, Color.White, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
-        }
-
-        // 2. Draw Room Rows
-        for (int r = 0; r < _rooms.Count; r++)
-        {
-            var room = _rooms[r];
-            var y = RowHeight + r * RowHeight;
-            var roomRect = new Rectangle(0, y, RoomColWidth, RowHeight);
-
-            // Draw Room Number & Category
-            TextRenderer.DrawText(g, $"{room.RoomNumber} ({room.Type})", Font, roomRect, Color.LightSteelBlue, TextFormatFlags.VerticalCenter | TextFormatFlags.Left);
-
-            // Draw Day Cells
-            for (int d = 0; d < DaysCount; d++)
-            {
-                var curDate = _startDate.AddDays(d);
-                var cellRect = new Rectangle(RoomColWidth + d * DayColWidth, y, DayColWidth, RowHeight);
-                g.DrawRectangle(Pens.DimGray, cellRect);
-
-                // Highlight booked interval
-                var hasBooking = _bookings.Any(b => b.RoomId == room.Id && curDate >= b.CheckInDate && curDate < b.CheckOutDate);
-                if (hasBooking)
-                {
-                    using var bookedBrush = new SolidBrush(Color.FromArgb(180, 239, 68, 68)); // Red / Occupied
-                    g.FillRectangle(bookedBrush, Rectangle.Inflate(cellRect, -2, -4));
-                }
-            }
+            int startX = roomColWidth + (b.CheckInDate.Day - 1) * cellWidth;
+            int width = (b.CheckOutDate.Day - b.CheckInDate.Day) * cellWidth;
+            DrawBookingBar(g, new Rectangle(startX, y + 4, width - 2, rowHeight - 8), b);
         }
     }
 }
@@ -101,22 +70,15 @@ public partial class RoomRackControl : UserControl
 
 ---
 
-## 4. TileView in ListView for Quick Room Selection
+## 4. Підводні камені та типові помилки
 
-In addition to the matrix, `ListView` in `View.Tile` mode provides compact room cards:
+> [!TIP]
+> **Перехід між місяцями:**
+> Якщо бронювання починається в поточному місяці, а закінчується в наступному, довжина смужки на календарі поточного місяця має обмежуватися останнім днем (`_daysInMonth`), інакше блок вийде за межі полотна.
 
-```csharp
-lvRooms.View = View.Tile;
-lvRooms.TileSize = new Size(180, 70);
+---
 
-foreach (var room in rooms)
-{
-    var item = new ListViewItem(new[]
-    {
-        $"Кімната {room.RoomNumber}",
-        $"{room.Type} - {room.DailyRate:F0} ₴/доба",
-        room.Status.ToString()
-    });
-    lvRooms.Items.Add(item);
-}
-```
+## 5. Практичний чек-лист для закріплення
+1. [ ] Перевірити роботу перемикання місяців календаря (Вперед / Назад).
+2. [ ] Переконатися, що броні вихідних днів підсвічуються коректно.
+3. [ ] Перевірити реакцію на подвійний клік по клітинці для швидкого поселення гостя.

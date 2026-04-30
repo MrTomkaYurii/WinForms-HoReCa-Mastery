@@ -1,90 +1,99 @@
-# Lesson 04: Modern Dark Shell & Navigation Architecture
+# Практичний гайд 04: Сучасна навігаційна оболонка (Main Shell Form) та нейтральна темна палітра
 
-## 1. Overview
+## 1. Теоретична база та дизайн-система
 
-Enterprise desktop applications should avoid opening dozens of overlapping top-level windows. A modern approach uses a **Shell Architecture** with a permanent sidebar, header, and a dynamic content host panel (`contentPanel`) that swaps child user controls or top-level forms hosted with `TopLevel = false`.
+Працівники індустрії гостинності (офіціанти, портьє, кухарі) працюють за моніторами позмінно від 8 до 14 годин поспіль. Класичні білі інтерфейси викликають швидку втому очей, тоді як чисто чорний `#000000` створює надмірний токсичний контраст (*halation effect*).
+
+Дизайн-система **LuxeResto** базується на **нейтральній графітовій палітрі (Neutral Charcoal Theme)**:
+- Фон полотна: `#121216` (глибокий графіт).
+- Контейнери карток: `#1C1C22` (м'який антрацит).
+- Семантичні статуси: м'який шавлієвий зелений (`#449B6E`), теплий бурштиновий (`#CD9637`), цегляний червоний (`#CD4B4B`).
+- Архітектура інтерфейсу побудована за шаблоном **Single Shell Architecture**: одне головне вікно керує боковим меню, статус-баром та динамічно змінює робочі представлення без перевідкриття вікон.
 
 ---
 
-## 2. Shell Layout Structure
+## 2. Архітектурна схема навігації
 
 ```mermaid
-graph TD
-    subgraph MainShellForm
-        SIDEBAR["Left Sidebar (240px)<br/>Brand, Navigation Buttons, System Status"]
-        HEADER["Top Header (50px)<br/>Active Module Title, Clock, Quick Actions"]
-        CONTENT["Content Host Panel (Dock = Fill)<br/>Embeds active form (POS, Hotel, KDS, etc.)"]
-        STATUS["StatusStrip (Bottom 26px)<br/>DB Connection, Active User, Memory Usage"]
-    end
+sequenceDiagram
+    autonumber
+    actor User as Користувач
+    participant Shell as MainShellForm
+    participant Nav as Панель навігації (Sidebar)
+    participant Content as Контейнер контенту (_pnlContent)
+    participant DI as IServiceProvider
+    participant Form as Вибрана форма (напр. PosTerminalForm)
+
+    User->>Nav: Клік по кнопці "🍽️ Ресторан & POS"
+    Nav->>Shell: OnNavButtonClicked(Button)
+    Shell->>Shell: Підсвічування активної кнопки (ThemePalette.BackgroundCard)
+    Shell->>Content: Controls.Clear()
+    Shell->>DI: GetRequiredService<PosTerminalForm>()
+    DI-->>Shell: Екземпляр форми
+    Shell->>Form: TopLevel = false; FormBorderStyle = None; Dock = Fill
+    Shell->>Content: Controls.Add(Form)
+    Shell->>Form: Show()
+    Shell->>Shell: Оновлення рядка стану (Статус БД, Користувач, Час)
 ```
 
 ---
 
-## 3. Dynamic Form Hosting Pattern
+## 3. Детальний розбір реалізації в проєкті
 
-To host a form inside a panel container without borders or caption bars:
+### 3.1. Централізована палітра: [`ThemePalette.cs`](file:///C:/Users/Yurii/source/repos/- MASTERY/WinForms-HoReCa-Mastery/src/HoReCa.WinForms/Common/ThemePalette.cs)
+
+Усі візуальні компоненти підключають кольори виключно через клас [`ThemePalette`](file:///C:/Users/Yurii/source/repos/- MASTERY/WinForms-HoReCa-Mastery/src/HoReCa.WinForms/Common/ThemePalette.cs):
 
 ```csharp
-private Form? _activeForm;
-
-public void NavigateTo<TForm>() where TForm : Form
+public static class ThemePalette
 {
-    // Resolve form from DI container
-    var form = _serviceProvider.GetRequiredService<TForm>();
+    public static readonly Color BackgroundDark = Color.FromArgb(18, 18, 22);
+    public static readonly Color BackgroundCard = Color.FromArgb(28, 28, 34);
+    public static readonly Color BackgroundSidebar = Color.FromArgb(13, 13, 16);
+    public static readonly Color BackgroundHeader = Color.FromArgb(22, 22, 26);
 
-    // Dispose old active form
-    if (_activeForm != null)
-    {
-        pnlContent.Controls.Remove(_activeForm);
-        _activeForm.Dispose();
-    }
+    public static readonly Color Primary = Color.FromArgb(150, 175, 205);
+    public static readonly Color PrimaryDark = Color.FromArgb(55, 68, 88);
 
-    _activeForm = form;
+    public static readonly Color Success = Color.FromArgb(68, 155, 110);
+    public static readonly Color Warning = Color.FromArgb(205, 150, 55);
+    public static readonly Color Danger = Color.FromArgb(205, 75, 75);
+    public static readonly Color Info = Color.FromArgb(100, 135, 180);
 
-    // Configure form as child of panel
+    public static readonly Color TextPrimary = Color.FromArgb(232, 235, 240);
+    public static readonly Color TextSecondary = Color.FromArgb(180, 186, 200);
+    public static readonly Color TextMuted = Color.FromArgb(140, 145, 158);
+}
+```
+
+### 3.2. Головна навігаційна форма: [`MainShellForm.cs`](file:///C:/Users/Yurii/source/repos/- MASTERY/WinForms-HoReCa-Mastery/src/HoReCa.WinForms/Forms/MainShellForm.cs)
+
+Вбудовування внутрішніх форм здійснюється за допомогою методу `ShowView<T>()`:
+```csharp
+public void ShowView<T>() where T : Form
+{
+    _pnlContent.Controls.Clear();
+    var form = _serviceProvider.GetRequiredService<T>();
     form.TopLevel = false;
     form.FormBorderStyle = FormBorderStyle.None;
     form.Dock = DockStyle.Fill;
-
-    pnlContent.Controls.Add(form);
-    pnlContent.Tag = form;
+    _pnlContent.Controls.Add(form);
     form.Show();
 }
 ```
 
 ---
 
-## 4. Theme & Styling Strategy
+## 4. Підводні камені та типові помилки
 
-A unified color palette keeps enterprise software cohesive and ergonomic during long working shifts:
-
-```csharp
-public static class ThemePalette
-{
-    public static readonly Color BackgroundDark = Color.FromArgb(15, 23, 42);    // Slate 900
-    public static readonly Color SurfaceDark    = Color.FromArgb(30, 41, 59);    // Slate 800
-    public static readonly Color SurfaceCard    = Color.FromArgb(51, 65, 85);    // Slate 700
-    public static readonly Color PrimaryAccent  = Color.FromArgb(16, 185, 129);  // Emerald 500
-    public static readonly Color CyanAccent     = Color.FromArgb(6, 182, 212);   // Cyan 500
-    public static readonly Color RubyAccent     = Color.FromArgb(239, 68, 68);   // Red 500
-    public static readonly Color TextPrimary    = Color.FromArgb(248, 250, 252); // Slate 50
-    public static readonly Color TextMuted      = Color.FromArgb(148, 163, 184); // Slate 400
-}
-```
+> [!WARNING]
+> **Утилізація пам'яті при зміні представлень:**
+> Якщо викликати `_pnlContent.Controls.Clear()` без коректного завершення життєвого циклу попередньої форми, її внутрішні підписки на події (таймери, шини повідомлень) залишаться в пам'яті, що призведе до поступового витоку RAM.
+> **Рішення:** перед очищенням контейнера перевіряйте, чи форма реалізує `IDisposable` або відписуйтеся від подій у її методі `OnFormClosing`.
 
 ---
 
-## 5. Live Status Updates with System Timers
-
-To display a live clock and monitor memory in the `StatusStrip`:
-
-```csharp
-var timer = new System.Windows.Forms.Timer { Interval = 1000 };
-timer.Tick += (s, e) =>
-{
-    lblClock.Text = DateTime.Now.ToString("HH:mm:ss | dd.MM.yyyy");
-    var memMb = GC.GetTotalMemory(false) / (1024.0 * 1024.0);
-    lblMemory.Text = $"RAM: {memMb:F1} MB";
-};
-timer.Start();
-```
+## 5. Практичний чек-лист для закріплення
+1. [ ] Перевірити, що розміри форми адаптуються від 1100x700 до 4K без зрізання тексту.
+2. [ ] Переконатися, що системна іконка та логотип ресторану завантажуються в заголовок форми.
+3. [ ] Перевірити коректність оновлення бейджа активного користувача після авторизації.

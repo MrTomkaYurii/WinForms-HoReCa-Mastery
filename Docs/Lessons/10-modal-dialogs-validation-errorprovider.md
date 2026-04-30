@@ -1,100 +1,116 @@
-# Lesson 10: Modal Dialogs, Input Masking & ErrorProvider Validation
+# Практичний гайд 10: Модальні діалоги, валідація FluentValidation та ErrorProvider
 
-## 1. Overview
+## 1. Теоретична база та принципи валідації в enterprise UI
 
-Data entry forms (e.g. creating hotel bookings, editing guest records) require strict validation to prevent corrupted database records. In Windows Forms, the canonical validation pattern combines `MaskedTextBox`, `DateTimePicker`, `ErrorProvider`, and `FluentValidation`.
+Помилки людського фактора під час внесення даних гостя (неправильний формат телефону, дата виїзду раніша за дату заїзду, відсутність обов'язкового ПІБ) спричиняють конфлікти броней та прямі фінансові збитки готелю.
+
+Для надійної валідації в системі **LuxeResto** поєднано два рівні:
+1. **Рівень застосунку (Application Layer):** Чисті декларативні валідатори **FluentValidation**, які перевіряють DTO-контракти незалежно від UI.
+2. **Рівень представлення (WinForms UI):** Компонент `ErrorProvider`, який виводить червоні значки попередження та спливаючі підказки безпосередньо біля проблемного поля введення, не блокуючи роботу користувача нав'язливими `MessageBox`.
 
 ---
 
-## 2. The Validation Architecture
+## 2. Архітектурна схема валідації діалогу
 
 ```mermaid
-flowchart TD
-    Submit["User clicks 'Зберегти'"] --> Read["Read Form Inputs into DTO"]
-    Read --> Validate["FluentValidation.ValidateAsync(dto)"]
-    Validate --> IsValid{Is Valid?}
-    IsValid -- Yes --> CloseDialog["Set DialogResult = DialogResult.OK & Close()"]
-    IsValid -- No --> Errors["Iterate ValidationFailures"]
-    Errors --> ErrorProvider["errorProvider.SetError(control, failure.ErrorMessage)"]
-    ErrorProvider --> Focus["Focus first invalid control"]
+sequenceDiagram
+    autonumber
+    actor User as Портьє рецепції
+    participant Dlg as CreateBookingDialog
+    participant Val as CreateBookingRequestValidator
+    participant EP as ErrorProvider
+    participant Svc as RoomBookingService
+
+    User->>Dlg: Вводить дату заїзду 2026-04-25 та дату виїзду 2026-04-20
+    User->>Dlg: Натискає "ЗБЕРЕГТИ БРОНЬ"
+    Dlg->>Val: ValidateAsync(request)
+    Val-->>Dlg: ValidationResult (IsValid = false, Error: "Дата виїзду має бути пізнішою за дату заїзду")
+    Dlg->>EP: SetError(dtpCheckOut, error.ErrorMessage)
+    EP-->>User: Відображення червоного значка (!) та підказки біля календаря
+    
+    User->>Dlg: Виправляє дату виїзду на 2026-04-28
+    Dlg->>Val: ValidateAsync(request)
+    Val-->>Dlg: ValidationResult (IsValid = true)
+    Dlg->>EP: Clear()
+    Dlg->>Svc: CreateBookingAsync(request)
+    Svc-->>Dlg: Успішно збережено
+    Dlg->>Dlg: DialogResult = OK; Close()
 ```
 
 ---
 
-## 3. Implementing the New Booking Dialog
+## 3. Детальний розбір реалізації в проєкті
+
+### 3.1. Валідатор FluentValidation: [`CreateBookingRequestValidator.cs`](file:///C:/Users/Yurii/source/repos/- MASTERY/WinForms-HoReCa-Mastery/src/HoReCa.Application/Validators/CreateBookingRequestValidator.cs)
 
 ```csharp
-public partial class NewBookingDialogForm : Form
+public class CreateBookingRequestValidator : AbstractValidator<CreateBookingRequest>
 {
-    private readonly IValidator<CreateBookingRequest> _validator;
-    private readonly ErrorProvider _errorProvider = new();
-
-    public CreateBookingRequest? ResultRequest { get; private set; }
-
-    public NewBookingDialogForm(IValidator<CreateBookingRequest> validator)
+    public CreateBookingRequestValidator()
     {
-        _validator = validator;
-        InitializeComponent();
-        SetupValidation();
+        RuleFor(x => x.GuestFullName)
+            .NotEmpty().WithMessage("ПІБ гостя є обов'язковим для заповнення.")
+            .MinimumLength(3).WithMessage("ПІБ має містити щонайменше 3 символи.");
+
+        RuleFor(x => x.GuestPhone)
+            .NotEmpty().WithMessage("Номер телефону є обов'язковим.")
+            .Matches(@"^\+?[0-9]{10,14}$").WithMessage("Введіть коректний номер телефону.");
+
+        RuleFor(x => x.CheckOutDate)
+            .GreaterThan(x => x.CheckInDate)
+            .WithMessage("Дата виїзду обов'язково має бути пізнішою за дату заїзду.");
     }
+}
+```
 
-    private void SetupValidation()
+### 3.2. Модальне вікно з `ErrorProvider`: [`CreateBookingDialog.cs`](file:///C:/Users/Yurii/source/repos/- MASTERY/WinForms-HoReCa-Mastery/src/HoReCa.WinForms/Forms/CreateBookingDialog.cs)
+
+```csharp
+private async Task OnSaveClicked()
+{
+    _errorProvider.Clear();
+
+    var request = new CreateBookingRequest(
+        RoomId: _selectedRoomId,
+        GuestFullName: _txtFullName.Text.Trim(),
+        GuestPhone: _txtPhone.Text.Trim(),
+        CheckInDate: _dtpCheckIn.Value.Date,
+        CheckOutDate: _dtpCheckOut.Value.Date
+    );
+
+    var result = await _validator.ValidateAsync(request);
+    if (!result.IsValid)
     {
-        _errorProvider.BlinkStyle = ErrorBlinkStyle.NeverBlink;
-
-        // Mask for Ukrainian phone numbers
-        mtbPhone.Mask = "+38 (000) 000-00-00";
-
-        // Date constraints
-        dtpCheckIn.MinDate = DateTime.Today;
-        dtpCheckOut.MinDate = DateTime.Today.AddDays(1);
-    }
-
-    private async void btnSave_Click(object sender, EventArgs e)
-    {
-        _errorProvider.Clear();
-
-        var request = new CreateBookingRequest(
-            RoomId: (int)cbRoom.SelectedValue!,
-            GuestFullName: txtFullName.Text.Trim(),
-            GuestPhone: mtbPhone.Text.Trim(),
-            GuestEmail: string.IsNullOrWhiteSpace(txtEmail.Text) ? null : txtEmail.Text.Trim(),
-            PassportOrId: txtPassport.Text.Trim(),
-            CheckInDate: dtpCheckIn.Value.Date,
-            CheckOutDate: dtpCheckOut.Value.Date,
-            SpecialRequests: txtNotes.Text.Trim()
-        );
-
-        var validationResult = await _validator.ValidateAsync(request);
-
-        if (!validationResult.IsValid)
+        foreach (var error in result.Errors)
         {
-            foreach (var failure in validationResult.Errors)
+            Control target = error.PropertyName switch
             {
-                var targetControl = failure.PropertyName switch
-                {
-                    nameof(request.GuestFullName) => (Control)txtFullName,
-                    nameof(request.GuestPhone) => mtbPhone,
-                    nameof(request.CheckOutDate) => dtpCheckOut,
-                    _ => txtFullName
-                };
-
-                _errorProvider.SetError(targetControl, failure.ErrorMessage);
-            }
-            return;
+                nameof(request.GuestFullName) => _txtFullName,
+                nameof(request.GuestPhone) => _txtPhone,
+                nameof(request.CheckOutDate) => _dtpCheckOut,
+                _ => _txtFullName
+            };
+            _errorProvider.SetError(target, error.ErrorMessage);
         }
-
-        ResultRequest = request;
-        DialogResult = DialogResult.OK;
-        Close();
+        return;
     }
+
+    DialogResult = DialogResult.OK;
+    Close();
 }
 ```
 
 ---
 
-## 4. Key Takeaways
+## 4. Підводні камені та типові помилки
 
-1. **`BlinkStyle.NeverBlink`**: Blinking error icons irritate users. Setting `NeverBlink` displays a steady red indicator.
-2. **`DialogResult`**: Always set `DialogResult = DialogResult.OK` only after successful validation.
-3. **Decoupled Rules**: By expressing validation rules in `FluentValidation`, the exact same rules are testable via unit tests without spinning up WinForms message loops.
+> [!WARNING]
+> **Блокування інтерфейсу модальними вікнами:**
+> Завжди викликайте діалогові вікна через `dialog.ShowDialog(this)`, передаючи батьківське вікно як овнера. Це гарантує, що модальне вікно не загубиться за головним вікном у системному таскбарі Windows при випадковому кліку.
+
+---
+
+## 5. Практичний чек-лист для закріплення
+1. [ ] Перевірити, що `_errorProvider.BlinkStyle` налаштовано на комфортний режим без надмірного миготіння.
+2. [ ] Переконатися, що кнопка «Зберегти» має `DialogResult = DialogResult.None` до проходження валідації.
+3. [ ] Перевірити роботу валідації на перетин дат (не можна забронювати номер, який уже зайнятий іншим гостем).

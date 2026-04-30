@@ -1,121 +1,92 @@
-# Lesson 08: Thermal Receipt Printing with GDI+ & PrintDocument
+# Практичний гайд 08: Генерація та друк фіскальних термочеків (80 мм) через GDI+ PrintDocument
 
-## 1. Overview
+## 1. Теоретична база та стандарти чекового друку
 
-Point of Sale systems rely on 80mm or 58mm POS thermal printers (ESC/POS or Windows Driver). In .NET, `System.Drawing.Printing.PrintDocument` allows precise graphic rendering of fiscal checks, typography, line separators, and logos.
+У ресторанах та готелях стандартом де-факто є спеціалізовані **термопринтери рулонного паперу шириною 80 мм** (або 58 мм) з інтерфейсами USB, Ethernet чи Bluetooth (протокол ESC/POS).
+
+Для друку фіскального чека безпосередньо з Windows Forms використовується клас `System.Drawing.Printing.PrintDocument`. На відміну від офісних принтерів формату А4, у чековому друці діють специфічні інженерні правила:
+1. **Ширина друку:** Рівно 280–300 пікселів при 96/203 DPI (приблизно 40–42 символи в рядку).
+2. **Моноширинний шрифт:** Використання шрифтів фіксованої ширини (`Cascadia Code`, `Consolas`, `Courier New`) гарантує, що стовпчики кількості та ціни будуть вирівняні ідеально по правій межі.
+3. **Динамічна довжина чека:** Довжина стрічки невідома заздалегідь — вона залежить від кількості замовлених страв. Потрібно точно обчислювати фінальну координату `Y` та команду відрізу паперу (*Paper Cut*).
 
 ---
 
-## 2. Printing Pipeline
+## 2. Архітектурна схема генерації чека
 
 ```mermaid
-sequenceDiagram
-    autonumber
-    participant UI as PaymentDialogForm
-    participant Engine as ReceiptPrinterEngine
-    participant Doc as PrintDocument
-    participant Preview as PrintPreviewDialog
-
-    UI->>Engine: PrintReceipt(orderDto, "GrandLux", "Ірина", previewOnly=true)
-    Engine->>Doc: Initialize (80mm width, custom margins)
-    Engine->>Doc: Attach PrintPage event handler
-    Engine->>Preview: Document = printDoc
-    Preview->>Doc: PrintPage(sender, PrintPageEventArgs)
-    Doc-->>Preview: Renders GDI+ graphics preview
-    Preview-->>UI: Displays dialog to user
+flowchart TD
+    Order["Об'єкт Order з позиціями OrderItems"] --> Engine["Клас ReceiptPrinterEngine"]
+    Engine --> Setup["Налаштування PrintDocument (Ширина = 80мм, Без полів)"]
+    Setup --> PrintPageEvent["Обробник події PrintPage(PrintPageEventArgs e)"]
+    
+    PrintPageEvent --> H1["1. Логотип та шапка ресторану (Назва, Адреса, ЄДРПОУ)"]
+    H1 --> H2["2. Інформація про стіл, офіціанта та дату/час"]
+    H2 --> H3["3. Розділювальна пунктирна лінія -------------------"]
+    H3 --> TableLoop["4. Цикл по всіх стравах (Назва, К-сть, Ціна, Сума)"]
+    TableLoop --> Totals["5. Блок підсумків: Сума, Знижка, ПДВ, РАЗОМ"]
+    Totals --> Fiscal["6. Фіскальний номер замовлення та штрих-код"]
+    Fiscal --> Cut["7. Завершення сторінки / Команда відрізу стрічки"]
 ```
 
 ---
 
-## 3. Formatting Fixed-Width Fiscal Text
+## 3. Детальний розбір реалізації в проєкті
 
-For ESC/POS or receipt text generation, a fixed-width 40-character template ensures alignment across thermal rolls:
-
-```csharp
-public static class ReceiptTextFormatter
-{
-    public static string GenerateTextReceipt(OrderDto order, string businessName, string cashierName)
-    {
-        var sb = new StringBuilder();
-        string line = new('=', 40);
-        string dash = new('-', 40);
-
-        sb.AppendLine(CenterText(businessName.ToUpperInvariant(), 40));
-        sb.AppendLine(CenterText("ГОТЕЛЬНО-РЕСТОРАННИЙ КОМПЛЕКС", 40));
-        sb.AppendLine(CenterText("м. Чернівці, вул. Головна, 100", 40));
-        sb.AppendLine(CenterText("ПН 382910481940 | ФІСКАЛЬНИЙ ЧЕК", 40));
-        sb.AppendLine(line);
-        sb.AppendLine($"ЧЕК №: {order.OrderNumber}");
-        sb.AppendLine($"ДАТА: {order.CreatedAt:dd.MM.yyyy HH:mm:ss}");
-        sb.AppendLine($"КАСИР: {cashierName}");
-        if (order.TableNumber.HasValue)
-            sb.AppendLine($"СТОЛИК: № {order.TableNumber.Value}");
-        sb.AppendLine(dash);
-
-        sb.AppendLine(string.Format("{0,-20} {1,4} {2,6} {3,7}", "НАЗВА", "К-ТЬ", "ЦІНА", "СУМА"));
-        sb.AppendLine(dash);
-
-        foreach (var item in order.Items)
-        {
-            string name = item.ItemName.Length > 20 ? item.ItemName[..19] + "…" : item.ItemName;
-            sb.AppendLine(string.Format(CultureInfo.InvariantCulture, "{0,-20} {1,4} {2,6:F0} {3,7:F2}", 
-                name, item.Quantity, item.UnitPrice, item.TotalPrice));
-        }
-
-        sb.AppendLine(dash);
-        sb.AppendLine($"ПІДСУМОК:                      {order.Subtotal.ToString("F2", CultureInfo.InvariantCulture),10} ₴");
-        sb.AppendLine(line);
-        sb.AppendLine($"ДО СПЛАТИ:                     {order.TotalAmount.ToString("F2", CultureInfo.InvariantCulture),10} ₴");
-        sb.AppendLine(line);
-
-        return sb.ToString();
-    }
-}
-```
-
----
-
-## 4. GDI+ PrintPage Drawing
-
-In `ReceiptPrinterEngine`, we handle the `PrintPage` event:
+### 3.1. Генерація чека: [`ReceiptPrinterEngine.cs`](file:///C:/Users/Yurii/source/repos/- MASTERY/WinForms-HoReCa-Mastery/src/HoReCa.WinForms/Controls/ReceiptPrinterEngine.cs)
 
 ```csharp
-private void OnPrintPage(object sender, PrintPageEventArgs e, OrderDto order, string businessName, string cashier)
+public static void PrintReceipt(Order order, PrintPageEventArgs e)
 {
     var g = e.Graphics;
-    using var fontRegular = new Font("Courier New", 9, FontStyle.Regular);
-    using var fontBold = new Font("Courier New", 10, FontStyle.Bold);
+    using var fontHeader = new Font("Segoe UI", 11f, FontStyle.Bold);
+    using var fontMono = new Font("Cascadia Code", 8.5f, FontStyle.Regular);
+    using var fontMonoBold = new Font("Cascadia Code", 9f, FontStyle.Bold);
     using var brush = new SolidBrush(Color.Black);
 
-    float y = 10;
-    float lineHeight = fontRegular.GetHeight(g) + 2;
+    float startX = 10;
+    float startY = 15;
+    float printableWidth = 280;
 
-    string receiptContent = GenerateTextReceipt(order, businessName, cashier);
-    foreach (var line in receiptContent.Split('\n'))
+    // Шапка
+    g.DrawString("LUXERESTO RESORT & RESTAURANT", fontHeader, brush, startX + 15, startY);
+    startY += 20;
+    g.DrawString("м. Київ, вул. Хрещатик, 1 | Тел: +380 44 000-00-00", fontMono, brush, startX, startY);
+    startY += 25;
+    g.DrawString(new string('-', 38), fontMono, brush, startX, startY);
+    startY += 15;
+
+    // Рядки замовлення
+    foreach (var item in order.Items)
     {
-        var trimmed = line.TrimEnd('\r');
-        var font = trimmed.Contains("ДО СПЛАТИ") || trimmed.Contains("ФІСКАЛЬНИЙ ЧЕК") ? fontBold : fontRegular;
-        g.DrawString(trimmed, font, brush, 10, y);
-        y += lineHeight;
+        string name = item.MenuItem.Name.Length > 20 ? item.MenuItem.Name[..18] + ".." : item.MenuItem.Name.PadRight(20);
+        string line = $"{name} {item.Quantity}x {item.UnitPrice,7:N2}";
+        g.DrawString(line, fontMono, brush, startX, startY);
+        startY += 16;
     }
 
-    e.HasMorePages = false;
+    // Підсумок
+    startY += 10;
+    g.DrawString(new string('=', 38), fontMono, brush, startX, startY);
+    startY += 18;
+    g.DrawString($"РАЗОМ ДО СПЛАТИ: {order.TotalAmount,18:N2} ₴", fontMonoBold, brush, startX, startY);
 }
 ```
 
+### 3.2. Генерація PDF-дубліката: [`PdfReportService.cs`](file:///C:/Users/Yurii/source/repos/- MASTERY/WinForms-HoReCa-Mastery/src/HoReCa.Infrastructure/Services/PdfReportService.cs)
+
+Для формування звітності для бухгалтерії та надсилання електронного чека гостю на email система генерує векторний PDF-документ.
+
 ---
 
-## 5. Previewing without Physical Hardware
+## 4. Підводні камені та типові помилки
 
-During development and automated testing, physical POS hardware is often absent. Using `PrintPreviewDialog` enables instant visual verification:
+> [!WARNING]
+> **Пам'ять графічних контекстів при друку:**
+> Об'єкт `PrintPageEventArgs.Graphics` не повинен викликати `Dispose()`, оскільки Windows керує його життєвим циклом під час формування черги диспетчера друку (*Print Spooler*). Проте всі власні пензлі та шрифти повинні очищуватися через `using`.
 
-```csharp
-using var preview = new PrintPreviewDialog
-{
-    Document = printDoc,
-    Width = 450,
-    Height = 700,
-    StartPosition = FormStartPosition.CenterParent
-};
-preview.ShowDialog();
-```
+---
+
+## 5. Практичний чек-лист для закріплення
+1. [ ] Перевірити друк чека у віртуальний принтер «Microsoft Print to PDF».
+2. [ ] Переконатися, що колонки кількості та сум вирівняні по правому краю.
+3. [ ] Перевірити коректне відображення символу гривні «₴» у моноширинному шрифті.

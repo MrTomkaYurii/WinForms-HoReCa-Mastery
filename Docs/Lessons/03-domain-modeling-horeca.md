@@ -1,128 +1,95 @@
-# Lesson 03: Domain Modeling & Encapsulation in HoReCa
+# Практичний гайд 03: Domain-Driven Design (DDD) та бізнес-інваріанти у ресторанному комплексі
 
-## 1. Overview
+## 1. Теоретична база та концепція DDD
 
-An enterprise application requires rich domain models where business rules and invariants are encapsulated within the entities, rather than being scattered across UI event handlers.
+У багатьох аматорських проєктах класи моделей є «анемічними» (*Anemic Domain Model*): вони містять лише гетери і сетери `{ get; set; }`, а вся логіка калькуляцій та перевірок розкидана по UI-формах. Це призводить до катастрофічних наслідків у фінансовому секторі (наприклад, сума замовлення порахована на касі відрізняється від суми, списаної на складі).
 
-In this lesson, we examine:
-- Aggregate roots and entity relationships.
-- Strongly-typed domain enums.
-- Encapsulated calculation methods (`RecalculateTotals()`, `IsLowStock`).
+За принципами **Domain-Driven Design (DDD)** сутність повинна самостійно захищати свої бізнес-інваріанти:
+- Стан замовлення може змінюватися тільки за чіткими правилами життєвого циклу.
+- Калькуляція знижок, чайових та податків інкапсульована в метод сутності.
+- Сутності не залежать від інтерфейсу чи бібліотек збереження даних.
 
 ---
 
-## 2. Domain Structure
-
-The domain contains two primary subdomains: **Hotel (Front-Desk)** and **Restaurant (POS & Kitchen)**.
+## 2. Діаграма станів замовлення (Order State Lifecycle)
 
 ```mermaid
-classDiagram
-    class BaseEntity {
-        +int Id
-        +DateTime CreatedAt
-        +DateTime? UpdatedAt
-    }
-
-    class Room {
-        +string RoomNumber
-        +int Floor
-        +RoomType Type
-        +decimal DailyRate
-        +int Capacity
-        +RoomStatus Status
-    }
-
-    class RoomBooking {
-        +int RoomId
-        +int GuestId
-        +DateTime CheckInDate
-        +DateTime CheckOutDate
-        +decimal TotalAmount
-        +bool IsCheckedIn
-        +bool IsCheckedOut
-    }
-
-    class Order {
-        +string OrderNumber
-        +int? TableId
-        +int? BookingId
-        +OrderStatus Status
-        +decimal Subtotal
-        +decimal DiscountPercent
-        +decimal TotalAmount
-        +RecalculateTotals()
-    }
-
-    class OrderItem {
-        +int MenuItemId
-        +int Quantity
-        +decimal UnitPrice
-        +decimal TotalPrice
-        +OrderStatus Status
-    }
-
-    BaseEntity <|-- Room
-    BaseEntity <|-- RoomBooking
-    BaseEntity <|-- Order
-    BaseEntity <|-- OrderItem
-    Order *-- OrderItem
+stateDiagram-v2
+    [*] --> New: Офіціант відкриває стіл
+    New --> InKitchen: Відправка на кухню (SendToKitchen)
+    InKitchen --> Ready: Шеф-кухар відзначає "Готово" (MarkReady)
+    Ready --> Served: Офіціант подає страву гостю
+    Served --> BillRequested: Гість просить рахунок (RequestBill)
+    BillRequested --> Paid: Розрахунок готівкою / карткою
+    Paid --> [*]: Стіл звільняється
+    
+    New --> Cancelled: Скасування замовлення
+    InKitchen --> Cancelled: Помилка замовлення (з актом списання)
 ```
 
 ---
 
-## 3. Encapsulating Business Logic
+## 3. Детальний розбір реалізації в проєкті
 
-### Order Calculation Logic
+### 3.1. Агрегат замовлення: [`Order.cs`](file:///C:/Users/Yurii/source/repos/- MASTERY/WinForms-HoReCa-Mastery/src/HoReCa.Domain/Entities/Order.cs)
 
-Rather than computing order totals in the UI, the `Order` entity owns its calculation invariant:
+У сутності [`Order`](file:///C:/Users/Yurii/source/repos/- MASTERY/WinForms-HoReCa-Mastery/src/HoReCa.Domain/Entities/Order.cs) бізнес-логіка розрахунку чека реалізована наступним чином:
 
 ```csharp
 public class Order : BaseEntity
 {
     public string OrderNumber { get; set; } = string.Empty;
-    public decimal Subtotal { get; set; }
-    public decimal DiscountPercent { get; set; }
-    public decimal TotalAmount { get; set; }
+    public int TableId { get; set; }
+    public OrderStatus Status { get; set; } = OrderStatus.New;
+    public List<OrderItem> Items { get; set; } = new();
 
-    public ICollection<OrderItem> Items { get; set; } = new List<OrderItem>();
+    public decimal SubTotal { get; private set; }
+    public decimal DiscountAmount { get; private set; }
+    public decimal TaxAmount { get; private set; }
+    public decimal TipAmount { get; private set; }
+    public decimal TotalAmount { get; private set; }
 
-    public void RecalculateTotals()
+    public void RecalculateTotals(decimal discountPercent = 0, decimal tipPercent = 0, decimal taxRate = 0.05m)
     {
-        Subtotal = Items.Sum(i => i.Quantity * i.UnitPrice);
-        
-        if (DiscountPercent > 0)
-        {
-            var discount = Subtotal * (DiscountPercent / 100m);
-            TotalAmount = Math.Max(0, Subtotal - discount);
-        }
-        else
-        {
-            TotalAmount = Subtotal;
-        }
-
-        UpdatedAt = DateTime.UtcNow;
+        SubTotal = Items.Sum(i => i.Quantity * i.UnitPrice);
+        DiscountAmount = Math.Round(SubTotal * (discountPercent / 100m), 2);
+        var taxableBase = SubTotal - DiscountAmount;
+        TaxAmount = Math.Round(taxableBase * taxRate, 2);
+        TipAmount = Math.Round(taxableBase * (tipPercent / 100m), 2);
+        TotalAmount = taxableBase + TaxAmount + TipAmount;
     }
 }
 ```
 
-### Inventory Threshold Logic
+### 3.2. Сутність столика: [`RestaurantTable.cs`](file:///C:/Users/Yurii/source/repos/- MASTERY/WinForms-HoReCa-Mastery/src/HoReCa.Domain/Entities/RestaurantTable.cs)
 
+Столик зберігає просторові координати для інтерактивного полотна зали, форму (`Round`, `Square`, `Rectangle`) та поточний статус:
 ```csharp
-public class InventoryItem : BaseEntity
+public class RestaurantTable : BaseEntity
 {
-    public string Name { get; set; } = string.Empty;
-    public string SKU { get; set; } = string.Empty;
-    public decimal CurrentStock { get; set; }
-    public decimal MinimumStock { get; set; }
-    public decimal CostPerUnit { get; set; }
-
-    public bool IsLowStock => CurrentStock <= MinimumStock;
+    public int TableNumber { get; set; }
+    public int ZoneId { get; set; }
+    public int Capacity { get; set; }
+    public TableStatus Status { get; set; } = TableStatus.Free;
+    public TableShape Shape { get; set; } = TableShape.Rectangle;
+    public int PositionX { get; set; }
+    public int PositionY { get; set; }
+    public int Width { get; set; }
+    public int Height { get; set; }
 }
 ```
 
 ---
 
-## 4. Key Takeaways
+## 4. Підводні камені та типові помилки
 
-1. **Entities are not pure bags of getters/setters**: Encapsulating mutations (e.g. recalculating totals or changing status) ensures consistency regardless of whether the call originates from a desktop UI, a unit test, or an automated batch worker.
-2. **Precision in Money**: Always use `decimal` for prices, discounts, and totals with EF Core precision mapping `HasPrecision(12, 2)`.
+> [!WARNING]
+> **Округлення банківське vs фінансове:**
+> За замовчуванням метод `Math.Round(val, 2)` у C# використовує банківське округлення (*Banker's Rounding* або *ToEven*). У фіскальному обліку ресторанів законодавство вимагає стандартного комерційного округлення `MidpointRounding.AwayFromZero`, інакше сума в чеку може відрізнятися на 1 копійку від суми позицій.
+
+---
+
+## 5. Практичний чек-лист для закріплення
+1. [ ] Перевірити, що зміна суми замовлення відбувається виключно через метод `RecalculateTotals()`.
+2. [ ] Переконатися, що додавання нової страви перевіряє статус замовлення (не можна додавати позиції в оплачений чек).
+3. [ ] Написати юніт-тест для перевірки калькуляції знижки 10% та чайових 5%.

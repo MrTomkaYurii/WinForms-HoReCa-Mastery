@@ -1,112 +1,90 @@
-# Lesson 06: POS Order Management & DataGridView Binding
+# Практичний гайд 06: Робоче місце касира (POS Terminal) та DataGridView кошика
 
-## 1. Overview
+## 1. Теоретична база та інженерні виклики
 
-The Point of Sale (POS) terminal is the mission-critical core of any restaurant. Fast order entry, item modification, table order switching, and real-time total recalculation are vital. In this lesson, we master binding order items to `DataGridView`, optimizing row selection, and managing live item collections.
+**POS-термінал (*Point of Sale*)** ресторану — це найбільш навантажений модуль системи. Касир та офіціант здійснюють сотні дій за годину. Інтерфейс повинен відповідати суворим ергономічним вимогам:
+- **Адаптивність категорій:** Кнопки фільтрації за категоріями страв не повинні створювати нативних потворних білих скролбарів Windows, які з'являються у стандартних `FlowLayoutPanel`.
+- **Візуальний каталог з фотографіями:** Кожна картка страви містить якісне зображення, точну ціну у великому шрифті та нормативний час приготування.
+- **Таблиця замовлення (Кошик):** Швидке додавання, зміна кількості порцій (+ / -), видалення позицій та перерахунок проміжних підсумків без затримок.
 
 ---
 
-## 2. Order Line Item Data Flow
+## 2. Архітектурна схема обробки кошика замовлення
 
 ```mermaid
-flowchart LR
-    MenuCard["DishCardControl Click"] --> AddItem["AddItemToActiveOrder()"]
-    AddItem --> ListBinding["BindingList<OrderItemViewModel>"]
-    ListBinding --> Grid["DataGridView (AutoGenerateColumns = false)"]
-    Grid --> Recalc["RecalculateTotals()"]
-    Recalc --> BillSummary["Update UI Subtotal / Discount / Total"]
+flowchart TD
+    Catalog["Каталог меню (Картки страв)"] -->|Клік по картці страви| AddItem["Обробник OnDishCardClicked(MenuItemId)"]
+    AddItem --> CheckExisting{"Страва вже є в замовленні?"}
+    CheckExisting -- Так --> Increment["Збільшення кількості (Quantity++)"]
+    CheckExisting -- Ні --> AppendRow["Додавання нового рядка в BindingList<OrderItemDto>"]
+    
+    Increment --> Recalc["Виклик Order.RecalculateTotals()"]
+    AppendRow --> Recalc
+    
+    Recalc --> RefreshUI["Оновлення панелі підсумків:"]
+    RefreshUI --> S1["Сума замовлення: SubTotal ₴"]
+    RefreshUI --> S2["Знижка / Чайові"]
+    RefreshUI --> S3["РАЗОМ ДО СПЛАТИ: TotalAmount ₴"]
+    RefreshUI --> EnablePay["Активація кнопки 'ОПЛАТИТИ'"]
 ```
 
 ---
 
-## 3. DataGridView Configuration Best Practices
+## 3. Детальний розбір реалізації в проєкті
 
-Configuring `DataGridView` programmatically ensures predictable column layouts, disables unwanted auto-generation, and enforces high-DPI friendliness:
+### 3.1. Адаптивна шапка категорій без системних скролбарів: [`PosTerminalForm.cs`](file:///C:/Users/Yurii/source/repos/- MASTERY/WinForms-HoReCa-Mastery/src/HoReCa.WinForms/Forms/PosTerminalForm.cs)
+
+Класична проблема WinForms: `FlowLayoutPanel` із `AutoScroll = true` при переповненні додає 17-піксельний білий системний Win32 scrollbar, що перекриває кнопки. В [`PosTerminalForm.cs`](file:///C:/Users/Yurii/source/repos/- MASTERY/WinForms-HoReCa-Mastery/src/HoReCa.WinForms/Forms/PosTerminalForm.cs) проблему вирішено за допомогою авто-перенесення рядків:
 
 ```csharp
-private void ConfigureOrderGrid()
+_pnlCategoryTabs = new FlowLayoutPanel
 {
-    dgvOrderItems.AutoGenerateColumns = false;
-    dgvOrderItems.AllowUserToAddRows = false;
-    dgvOrderItems.AllowUserToDeleteRows = false;
-    dgvOrderItems.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-    dgvOrderItems.MultiSelect = false;
-    dgvOrderItems.RowHeadersVisible = false;
-    dgvOrderItems.BackgroundColor = ThemePalette.SurfaceDark;
-    dgvOrderItems.BorderStyle = BorderStyle.None;
+    Dock = DockStyle.Top,
+    AutoSize = true,
+    AutoSizeMode = AutoSizeMode.GrowAndShrink,
+    WrapContents = true,  // Автоматичне перенесення кнопок на 2-й рядок при звуженні
+    AutoScroll = false,   // Жодних білих нативних смуг прокрутки
+    BackColor = Color.Transparent,
+    Margin = new Padding(0),
+    Padding = new Padding(0, 4, 0, 4)
+};
+```
 
-    dgvOrderItems.Columns.AddRange(new DataGridViewColumn[]
-    {
-        new DataGridViewTextBoxColumn
-        {
-            DataPropertyName = nameof(OrderItemViewModel.ItemName),
-            HeaderText = "Страва",
-            AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill
-        },
-        new DataGridViewTextBoxColumn
-        {
-            DataPropertyName = nameof(OrderItemViewModel.Quantity),
-            HeaderText = "К-ть",
-            Width = 55
-        },
-        new DataGridViewTextBoxColumn
-        {
-            DataPropertyName = nameof(OrderItemViewModel.UnitPrice),
-            HeaderText = "Ціна",
-            Width = 75,
-            DefaultCellStyle = { Format = "N2" }
-        },
-        new DataGridViewTextBoxColumn
-        {
-            DataPropertyName = nameof(OrderItemViewModel.TotalPrice),
-            HeaderText = "Сума",
-            Width = 85,
-            DefaultCellStyle = { Format = "N2", Font = new Font("Segoe UI", 9, FontStyle.Bold) }
-        }
-    });
-}
+### 3.2. Картка страви з фотографією: `CreateDishCard`
+
+Кожна страва створюється як стильний блок розміром 170x165 px із зображенням, назвою, бейджем часу та зеленою ціною:
+```csharp
+var card = new Panel
+{
+    Size = new Size(170, 165),
+    BackColor = ThemePalette.BackgroundCard,
+    Margin = new Padding(6),
+    Cursor = Cursors.Hand
+};
+
+// Завантаження фотографії страви з Assets
+var pic = new PictureBox
+{
+    Dock = DockStyle.Top,
+    Height = 90,
+    SizeMode = PictureBoxSizeMode.Zoom,
+    Image = LoadDishImage(dish.ImageUrl)
+};
 ```
 
 ---
 
-## 4. BindingList vs ObservableCollection
+## 4. Підводні камені та типові помилки
 
-While WPF and MAUI rely on `ObservableCollection<T>`, Windows Forms standard data-binding was architected around `System.ComponentModel.BindingList<T>`. `BindingList<T>` automatically raises `ListChanged` events that `DataGridView` listens to, ensuring changes to items trigger automatic UI repaints without requiring manual `dgv.Refresh()`.
-
-```csharp
-private readonly BindingList<OrderItemViewModel> _orderItems = new();
-
-private void InitializeOrderBinding()
-{
-    dgvOrderItems.DataSource = _orderItems;
-    _orderItems.ListChanged += (s, e) => RecalculateOrderTotals();
-}
-```
+> [!WARNING]
+> **Мерехтіння DataGridView при частих оновленнях:**
+> При додаванні страв або зміні кількості стандартний `DataGridView` може неприємно блимати. 
+> **Рішення:** увімкнення подвійної буферизації через рефлексію для сітки замовлень:
+> `typeof(DataGridView).InvokeMember("DoubleBuffered", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.SetProperty, null, _gridOrder, new object[] { true });`.
 
 ---
 
-## 5. Adding & Modifying Items
-
-```csharp
-public void AddMenuItem(MenuItemDto item)
-{
-    var existing = _orderItems.FirstOrDefault(i => i.MenuItemId == item.Id && i.Modifiers == null);
-    if (existing != null)
-    {
-        existing.Quantity++;
-        existing.TotalPrice = existing.Quantity * existing.UnitPrice;
-        _orderItems.ResetItem(_orderItems.IndexOf(existing));
-    }
-    else
-    {
-        _orderItems.Add(new OrderItemViewModel
-        {
-            MenuItemId = item.Id,
-            ItemName = item.Name,
-            UnitPrice = item.Price,
-            Quantity = 1,
-            TotalPrice = item.Price
-        });
-    }
-}
-```
+## 5. Практичний чек-лист для закріплення
+1. [ ] Перевірити коректність перенесення категорій при зміні роздільної здатності екрана.
+2. [ ] Переконатися, що натискання «+1» та «-1» миттєво оновлює суму «РАЗОМ ДО СПЛАТИ».
+3. [ ] Перевірити наявність плейсхолдера для страв, у яких відсутнє зображення на диску.
