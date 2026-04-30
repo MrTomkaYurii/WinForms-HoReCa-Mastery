@@ -320,29 +320,33 @@ public class StaffMonitoringForm : BaseForm
     {
         var pnl = new Panel
         {
-            Width = 190,
-            Height = 70,
+            Width = 205,
+            Height = 78,
             BackColor = ThemePalette.BackgroundSidebar,
-            Padding = new Padding(12, 8, 12, 8),
+            Padding = new Padding(14, 10, 14, 10),
             Margin = new Padding(0, 0, 12, 0)
         };
 
         var lblTitle = new Label
         {
             Text = title,
-            Font = new Font("Segoe UI", 7.5f, FontStyle.Bold),
+            Font = new Font("Segoe UI", 8f, FontStyle.Bold),
             ForeColor = ThemePalette.TextMuted,
             Dock = DockStyle.Top,
-            Height = 16
+            Height = 20,
+            TextAlign = ContentAlignment.MiddleLeft,
+            AutoEllipsis = true
         };
 
         var lblVal = new Label
         {
             Text = value,
-            Font = new Font("Segoe UI", 13.5f, FontStyle.Bold),
+            Font = new Font("Segoe UI", 15f, FontStyle.Bold),
             ForeColor = valueColor,
             Dock = DockStyle.Top,
-            Height = 28
+            Height = 34,
+            TextAlign = ContentAlignment.MiddleLeft,
+            AutoEllipsis = true
         };
 
         pnl.Controls.AddRange(new Control[] { lblVal, lblTitle });

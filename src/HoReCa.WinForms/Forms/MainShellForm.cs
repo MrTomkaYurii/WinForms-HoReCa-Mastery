@@ -42,6 +42,12 @@ public class MainShellForm : BaseForm
         MinimumSize = new Size(1100, 700);
         WindowState = FormWindowState.Maximized;
 
+        var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "app.ico");
+        if (File.Exists(iconPath))
+        {
+            try { Icon = new Icon(iconPath); } catch { }
+        }
+
         // Header Panel (Responsive Layout)
         var pnlHeader = new Panel
         {
@@ -58,8 +64,25 @@ public class MainShellForm : BaseForm
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
             BackColor = Color.Transparent,
-            Padding = new Padding(0, 14, 0, 0)
+            Padding = new Padding(0, 12, 0, 0)
         };
+
+        var emblemPath = Path.Combine(AppContext.BaseDirectory, "Assets", "Images", "restaurant_emblem.png");
+        if (File.Exists(emblemPath))
+        {
+            try
+            {
+                var picEmblem = new PictureBox
+                {
+                    Image = Image.FromFile(emblemPath),
+                    SizeMode = PictureBoxSizeMode.Zoom,
+                    Size = new Size(36, 36),
+                    Margin = new Padding(0, 0, 10, 0)
+                };
+                pnlHeaderLeft.Controls.Add(picEmblem);
+            }
+            catch { }
+        }
 
         var lblBrand = new Label
         {
@@ -67,7 +90,7 @@ public class MainShellForm : BaseForm
             Font = new Font("Segoe UI", 13.5f, FontStyle.Bold),
             ForeColor = ThemePalette.TextPrimary,
             AutoSize = true,
-            Margin = new Padding(0, 0, 12, 0)
+            Margin = new Padding(0, 5, 12, 0)
         };
 
         var lblSub = new Label

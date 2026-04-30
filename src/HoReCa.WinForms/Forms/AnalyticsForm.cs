@@ -50,12 +50,12 @@ public class AnalyticsForm : BaseForm
         var pnlKpis = new TableLayoutPanel
         {
             Dock = DockStyle.Top,
-            Height = 105,
+            Height = 126,
             ColumnCount = 4,
             RowCount = 1,
             BackColor = ThemePalette.BackgroundSidebar,
-            Padding = new Padding(8),
-            Margin = new Padding(0, 0, 0, 8)
+            Padding = new Padding(10, 8, 10, 8),
+            Margin = new Padding(0)
         };
 
         for (int i = 0; i < 4; i++)
@@ -68,13 +68,21 @@ public class AnalyticsForm : BaseForm
         _lblAverageCheck = CreateKpiCard(pnlKpis, 2, "СЕРЕДНІЙ ЧЕК СТОЛУ", "0.00 ₴", "Цільовий: 750 ₴", ThemePalette.Warning);
         _lblOccupancy = CreateKpiCard(pnlKpis, 3, "ЗАВАНТАЖЕНІСТЬ ГОТЕЛЮ", "0%", "Номерний фонд", ThemePalette.Info);
 
+        // Spacer between KPIs and Toolbar
+        var pnlKpiSpacer = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 10,
+            BackColor = ThemePalette.BackgroundDark
+        };
+
         // 2. Navigation Tab Bar Panel
         var pnlToolbar = new Panel
         {
             Dock = DockStyle.Top,
-            Height = 52,
+            Height = 56,
             BackColor = ThemePalette.BackgroundSidebar,
-            Padding = new Padding(8, 6, 8, 6)
+            Padding = new Padding(10, 8, 10, 8)
         };
 
         var pnlTabsFlow = new FlowLayoutPanel
@@ -99,7 +107,7 @@ public class AnalyticsForm : BaseForm
             ForeColor = ThemePalette.TextPrimary,
             BackColor = ThemePalette.BackgroundCard,
             FlatStyle = FlatStyle.Flat,
-            Size = new Size(130, 38),
+            Size = new Size(160, 38),
             Dock = DockStyle.Right,
             Cursor = Cursors.Hand,
             UseMnemonic = false
@@ -170,6 +178,7 @@ public class AnalyticsForm : BaseForm
         // Assembly
         Controls.Add(_splitMain);
         Controls.Add(pnlToolbar);
+        Controls.Add(pnlKpiSpacer);
         Controls.Add(pnlKpis);
 
         Resize += (s, e) =>
@@ -259,38 +268,46 @@ public class AnalyticsForm : BaseForm
         {
             Dock = DockStyle.Fill,
             BackColor = ThemePalette.BackgroundCard,
-            Margin = new Padding(6),
-            Padding = new Padding(12, 8, 12, 8)
-        };
-
-        var lblSub = new Label
-        {
-            Text = subtitle,
-            Font = new Font("Segoe UI", 7.5f, FontStyle.Regular),
-            ForeColor = ThemePalette.TextMuted,
-            Dock = DockStyle.Bottom,
-            Height = 16
-        };
-
-        var lblVal = new Label
-        {
-            Text = initialValue,
-            Font = new Font("Segoe UI", 15.5f, FontStyle.Bold),
-            ForeColor = accentColor,
-            Dock = DockStyle.Fill
+            Margin = new Padding(6, 4, 6, 4),
+            Padding = new Padding(16, 12, 16, 12)
         };
 
         var lblTitle = new Label
         {
             Text = title,
-            Font = new Font("Segoe UI", 7.5f, FontStyle.Bold),
+            Font = new Font("Segoe UI", 8.2f, FontStyle.Bold),
             ForeColor = ThemePalette.TextMuted,
             Dock = DockStyle.Top,
-            Height = 18
+            Height = 20,
+            TextAlign = ContentAlignment.MiddleLeft,
+            AutoEllipsis = true
         };
 
-        pnl.Controls.Add(lblVal);
+        var lblVal = new Label
+        {
+            Text = initialValue,
+            Font = new Font("Segoe UI", 17f, FontStyle.Bold),
+            ForeColor = accentColor,
+            Dock = DockStyle.Top,
+            Height = 40,
+            TextAlign = ContentAlignment.MiddleLeft,
+            AutoEllipsis = true
+        };
+
+        var lblSub = new Label
+        {
+            Text = subtitle,
+            Font = new Font("Segoe UI", 8.5f, FontStyle.Regular),
+            ForeColor = ThemePalette.TextSecondary,
+            Dock = DockStyle.Top,
+            Height = 22,
+            TextAlign = ContentAlignment.MiddleLeft,
+            AutoEllipsis = true
+        };
+
+        // Added in reverse DockStyle.Top order so lblTitle is first, lblVal is second, lblSub is third
         pnl.Controls.Add(lblSub);
+        pnl.Controls.Add(lblVal);
         pnl.Controls.Add(lblTitle);
         parent.Controls.Add(pnl, col, 0);
 

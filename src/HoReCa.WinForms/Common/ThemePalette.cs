@@ -25,6 +25,7 @@ public static class ThemePalette
 
     // Text hierarchy
     public static readonly Color TextPrimary = Color.FromArgb(232, 235, 240);          // Crisp soft white
+    public static readonly Color TextSecondary = Color.FromArgb(180, 186, 200);        // Secondary readable text
     public static readonly Color TextMuted = Color.FromArgb(140, 145, 158);            // Neutral medium grey
     public static readonly Color TextInverse = Color.FromArgb(18, 18, 22);             // Dark text for bright badges
 
