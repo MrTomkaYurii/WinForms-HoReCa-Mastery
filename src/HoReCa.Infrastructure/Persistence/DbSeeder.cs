@@ -197,6 +197,46 @@ public static class DbSeeder
             await context.SaveChangesAsync();
         }
 
+        // Migrate table positions to ensure non-overlapping clean layout across all zones
+        var existingTables = await context.Tables.ToListAsync();
+        if (existingTables.Count > 0)
+        {
+            var defaultPositions = new Dictionary<int, (int X, int Y, int W, int H)>
+            {
+                // Main Hall (Zone 1)
+                { 1, (40, 40, 110, 110) },
+                { 2, (180, 45, 125, 90) },
+                { 3, (330, 45, 125, 90) },
+                { 4, (480, 45, 135, 90) },
+                { 5, (40, 185, 110, 90) },
+                { 6, (180, 185, 125, 90) },
+                { 7, (330, 185, 125, 90) },
+                { 8, (480, 185, 145, 95) },
+                // Terrace (Zone 2)
+                { 11, (660, 40, 110, 110) },
+                { 12, (800, 45, 125, 90) },
+                { 13, (950, 45, 125, 90) },
+                { 14, (660, 185, 135, 90) },
+                { 15, (815, 185, 125, 90) },
+                { 16, (960, 185, 135, 90) },
+                // VIP Lounge (Zone 3)
+                { 21, (200, 330, 180, 100) },
+                { 22, (440, 320, 130, 130) }
+            };
+
+            foreach (var t in existingTables)
+            {
+                if (defaultPositions.TryGetValue(t.TableNumber, out var pos))
+                {
+                    t.PositionX = pos.X;
+                    t.PositionY = pos.Y;
+                    t.Width = pos.W;
+                    t.Height = pos.H;
+                }
+            }
+            await context.SaveChangesAsync();
+        }
+
         // If zones exist, DB was already populated
         if (await context.TableZones.AnyAsync())
         {
@@ -333,30 +373,30 @@ public static class DbSeeder
         context.TableZones.AddRange(zoneMain, zoneTerrace, zoneVip);
         await context.SaveChangesAsync();
 
-        // 5. Restaurant Tables with clean, non-overlapping default layout
+        // 5. Restaurant Tables with clean, non-overlapping default layout across all zones
         var tables = new List<RestaurantTable>
         {
-            // Main Hall (Zone 1) - Neat grid
-            new() { TableNumber = 1, ZoneId = zoneMain.Id, Capacity = 2, Shape = TableShape.Round, PositionX = 40, PositionY = 30, Width = 95, Height = 95, Status = TableStatus.Free },
-            new() { TableNumber = 2, ZoneId = zoneMain.Id, Capacity = 4, Shape = TableShape.Rectangle, PositionX = 170, PositionY = 30, Width = 120, Height = 95, Status = TableStatus.Occupied },
-            new() { TableNumber = 3, ZoneId = zoneMain.Id, Capacity = 4, Shape = TableShape.Rectangle, PositionX = 320, PositionY = 30, Width = 120, Height = 95, Status = TableStatus.Free },
-            new() { TableNumber = 4, ZoneId = zoneMain.Id, Capacity = 6, Shape = TableShape.Rectangle, PositionX = 470, PositionY = 30, Width = 140, Height = 95, Status = TableStatus.Free },
-            new() { TableNumber = 5, ZoneId = zoneMain.Id, Capacity = 2, Shape = TableShape.Square, PositionX = 40, PositionY = 160, Width = 95, Height = 95, Status = TableStatus.BillRequested },
-            new() { TableNumber = 6, ZoneId = zoneMain.Id, Capacity = 4, Shape = TableShape.Rectangle, PositionX = 170, PositionY = 160, Width = 120, Height = 95, Status = TableStatus.Free },
-            new() { TableNumber = 7, ZoneId = zoneMain.Id, Capacity = 4, Shape = TableShape.Rectangle, PositionX = 320, PositionY = 160, Width = 120, Height = 95, Status = TableStatus.Free },
-            new() { TableNumber = 8, ZoneId = zoneMain.Id, Capacity = 8, Shape = TableShape.Rectangle, PositionX = 470, PositionY = 160, Width = 150, Height = 95, Status = TableStatus.Free },
+            // Main Hall (Zone 1) - Left & Center sector
+            new() { TableNumber = 1, ZoneId = zoneMain.Id, Capacity = 2, Shape = TableShape.Round, PositionX = 40, PositionY = 40, Width = 110, Height = 110, Status = TableStatus.Free },
+            new() { TableNumber = 2, ZoneId = zoneMain.Id, Capacity = 4, Shape = TableShape.Rectangle, PositionX = 180, PositionY = 45, Width = 125, Height = 90, Status = TableStatus.Occupied },
+            new() { TableNumber = 3, ZoneId = zoneMain.Id, Capacity = 4, Shape = TableShape.Rectangle, PositionX = 330, PositionY = 45, Width = 125, Height = 90, Status = TableStatus.Free },
+            new() { TableNumber = 4, ZoneId = zoneMain.Id, Capacity = 6, Shape = TableShape.Rectangle, PositionX = 480, PositionY = 45, Width = 135, Height = 90, Status = TableStatus.Free },
+            new() { TableNumber = 5, ZoneId = zoneMain.Id, Capacity = 2, Shape = TableShape.Square, PositionX = 40, PositionY = 185, Width = 110, Height = 90, Status = TableStatus.BillRequested },
+            new() { TableNumber = 6, ZoneId = zoneMain.Id, Capacity = 4, Shape = TableShape.Rectangle, PositionX = 180, PositionY = 185, Width = 125, Height = 90, Status = TableStatus.Free },
+            new() { TableNumber = 7, ZoneId = zoneMain.Id, Capacity = 4, Shape = TableShape.Rectangle, PositionX = 330, PositionY = 185, Width = 125, Height = 90, Status = TableStatus.Free },
+            new() { TableNumber = 8, ZoneId = zoneMain.Id, Capacity = 8, Shape = TableShape.Rectangle, PositionX = 480, PositionY = 185, Width = 145, Height = 95, Status = TableStatus.Free },
 
-            // Terrace (Zone 2)
-            new() { TableNumber = 11, ZoneId = zoneTerrace.Id, Capacity = 2, Shape = TableShape.Round, PositionX = 50, PositionY = 40, Width = 90, Height = 90, Status = TableStatus.Free },
-            new() { TableNumber = 12, ZoneId = zoneTerrace.Id, Capacity = 4, Shape = TableShape.Square, PositionX = 180, PositionY = 40, Width = 100, Height = 90, Status = TableStatus.Occupied },
-            new() { TableNumber = 13, ZoneId = zoneTerrace.Id, Capacity = 4, Shape = TableShape.Square, PositionX = 320, PositionY = 40, Width = 100, Height = 90, Status = TableStatus.Free },
-            new() { TableNumber = 14, ZoneId = zoneTerrace.Id, Capacity = 6, Shape = TableShape.Rectangle, PositionX = 460, PositionY = 40, Width = 130, Height = 90, Status = TableStatus.Free },
-            new() { TableNumber = 15, ZoneId = zoneTerrace.Id, Capacity = 4, Shape = TableShape.Square, PositionX = 180, PositionY = 170, Width = 100, Height = 90, Status = TableStatus.Free },
-            new() { TableNumber = 16, ZoneId = zoneTerrace.Id, Capacity = 6, Shape = TableShape.Rectangle, PositionX = 320, PositionY = 170, Width = 130, Height = 90, Status = TableStatus.Free },
+            // Terrace (Zone 2) - Right sector
+            new() { TableNumber = 11, ZoneId = zoneTerrace.Id, Capacity = 2, Shape = TableShape.Round, PositionX = 660, PositionY = 40, Width = 110, Height = 110, Status = TableStatus.Free },
+            new() { TableNumber = 12, ZoneId = zoneTerrace.Id, Capacity = 4, Shape = TableShape.Square, PositionX = 800, PositionY = 45, Width = 125, Height = 90, Status = TableStatus.Occupied },
+            new() { TableNumber = 13, ZoneId = zoneTerrace.Id, Capacity = 4, Shape = TableShape.Square, PositionX = 950, PositionY = 45, Width = 125, Height = 90, Status = TableStatus.Free },
+            new() { TableNumber = 14, ZoneId = zoneTerrace.Id, Capacity = 6, Shape = TableShape.Rectangle, PositionX = 660, PositionY = 185, Width = 135, Height = 90, Status = TableStatus.Free },
+            new() { TableNumber = 15, ZoneId = zoneTerrace.Id, Capacity = 4, Shape = TableShape.Square, PositionX = 815, PositionY = 185, Width = 125, Height = 90, Status = TableStatus.Free },
+            new() { TableNumber = 16, ZoneId = zoneTerrace.Id, Capacity = 6, Shape = TableShape.Rectangle, PositionX = 960, PositionY = 185, Width = 135, Height = 90, Status = TableStatus.Free },
 
-            // VIP Lounge (Zone 3)
-            new() { TableNumber = 21, ZoneId = zoneVip.Id, Capacity = 10, Shape = TableShape.Rectangle, PositionX = 80, PositionY = 60, Width = 220, Height = 120, Status = TableStatus.Reserved },
-            new() { TableNumber = 22, ZoneId = zoneVip.Id, Capacity = 8, Shape = TableShape.Round, PositionX = 350, PositionY = 60, Width = 140, Height = 140, Status = TableStatus.Free }
+            // VIP Lounge (Zone 3) - Lower Lounge sector
+            new() { TableNumber = 21, ZoneId = zoneVip.Id, Capacity = 10, Shape = TableShape.Rectangle, PositionX = 200, PositionY = 330, Width = 180, Height = 100, Status = TableStatus.Reserved },
+            new() { TableNumber = 22, ZoneId = zoneVip.Id, Capacity = 8, Shape = TableShape.Round, PositionX = 440, PositionY = 320, Width = 130, Height = 130, Status = TableStatus.Free }
         };
 
         context.Tables.AddRange(tables);

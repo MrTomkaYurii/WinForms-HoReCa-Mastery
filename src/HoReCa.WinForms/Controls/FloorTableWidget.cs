@@ -102,6 +102,7 @@ public class FloorTableWidget : UserControl
         base.OnPaint(e);
         var g = e.Graphics;
         g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
 
         // Ensure clean dark canvas background
         using var canvasBrush = new SolidBrush(ThemePalette.BackgroundDark);
@@ -121,7 +122,7 @@ public class FloorTableWidget : UserControl
 
         // Draw shadow
         using var shadowPath = GetTablePath(new Rectangle(rect.X + 2, rect.Y + 2, rect.Width, rect.Height), _table.Shape);
-        using var shadowBrush = new SolidBrush(Color.FromArgb(50, 0, 0, 0));
+        using var shadowBrush = new SolidBrush(Color.FromArgb(40, 0, 0, 0));
         g.FillPath(shadowBrush, shadowPath);
 
         // Fill background
@@ -133,35 +134,68 @@ public class FloorTableWidget : UserControl
         using var borderPen = new Pen(_isHovered ? ThemePalette.Primary : statusColor, _isHovered ? 2.5f : 1.8f);
         g.DrawPath(borderPen, tablePath);
 
+        // Inscribed safe area strictly inside geometry
+        Rectangle safeRect;
+        if (_table.Shape == TableShape.Round)
+        {
+            int insetX = (int)(Width * 0.16);
+            int insetY = (int)(Height * 0.16);
+            safeRect = new Rectangle(insetX, insetY, Width - 2 * insetX, Height - 2 * insetY);
+        }
+        else
+        {
+            safeRect = new Rectangle(10, 8, Width - 20, Height - 16);
+        }
+
+        using var sfCenter = new StringFormat
+        {
+            Alignment = StringAlignment.Center,
+            LineAlignment = StringAlignment.Center,
+            Trimming = StringTrimming.EllipsisCharacter,
+            FormatFlags = StringFormatFlags.NoWrap
+        };
+
         // Table Number Header
         string title = $"№ {_table.TableNumber}";
-        using var fontTitle = new Font("Segoe UI", 11.5f, FontStyle.Bold);
+        using var fontTitle = new Font("Segoe UI", _table.Shape == TableShape.Round ? 11f : 12f, FontStyle.Bold);
         using var textBrush = new SolidBrush(ThemePalette.TextPrimary);
-        var sizeTitle = g.MeasureString(title, fontTitle);
-        g.DrawString(title, fontTitle, textBrush, (Width - sizeTitle.Width) / 2, 8);
+        int titleHeight = (int)(safeRect.Height * 0.38);
+        var titleRect = new Rectangle(safeRect.X, safeRect.Y, safeRect.Width, titleHeight);
+        g.DrawString(title, fontTitle, textBrush, titleRect, sfCenter);
 
-        // Zone Name Tag
+        // Zone Name Tag (Ellipsized so it never spills out)
         string zoneStr = _table.ZoneName;
         using var fontZone = new Font("Segoe UI", 7.5f, FontStyle.Regular);
         using var zoneBrush = new SolidBrush(ThemePalette.TextMuted);
-        var sizeZone = g.MeasureString(zoneStr, fontZone);
-        g.DrawString(zoneStr, fontZone, zoneBrush, (Width - sizeZone.Width) / 2, 28);
+        int zoneHeight = (int)(safeRect.Height * 0.28);
+        var zoneRect = new Rectangle(safeRect.X, safeRect.Y + titleHeight - 2, safeRect.Width, zoneHeight);
+        g.DrawString(zoneStr, fontZone, zoneBrush, zoneRect, sfCenter);
 
-        // Capacity and Status subtitle
+        // Capacity and Status subtitle (Amount or Capacity)
         string subtitle = $"{_table.Capacity} місць";
         if (_table.ActiveOrderTotal.HasValue && _table.ActiveOrderTotal > 0)
         {
-            subtitle = $"{_table.ActiveOrderTotal:F0} ₴";
+            subtitle = $"{_table.ActiveOrderTotal:N0} ₴";
         }
 
         using var fontSub = new Font("Segoe UI", 8.5f, FontStyle.Bold);
         using var subBrush = new SolidBrush(_table.Status == TableStatus.Occupied ? ThemePalette.Warning : (_table.Status == TableStatus.Free ? ThemePalette.Success : ThemePalette.TextMuted));
-        var sizeSub = g.MeasureString(subtitle, fontSub);
-        g.DrawString(subtitle, fontSub, subBrush, (Width - sizeSub.Width) / 2, Height - 22);
+        int subHeight = (int)(safeRect.Height * 0.34);
+        var subRect = new Rectangle(safeRect.X, safeRect.Bottom - subHeight, safeRect.Width, subHeight);
+        g.DrawString(subtitle, fontSub, subBrush, subRect, sfCenter);
 
-        // Status indicator dot
+        // Status indicator dot (Placed safely inside border)
         using var dotBrush = new SolidBrush(statusColor);
-        g.FillEllipse(dotBrush, Width - 16, 8, 8, 8);
+        if (_table.Shape == TableShape.Round)
+        {
+            int dotX = (int)(Width * 0.74);
+            int dotY = (int)(Height * 0.16);
+            g.FillEllipse(dotBrush, dotX, dotY, 8, 8);
+        }
+        else
+        {
+            g.FillEllipse(dotBrush, Width - 18, 9, 8, 8);
+        }
     }
 
     private static GraphicsPath GetTablePath(Rectangle bounds, TableShape shape)
