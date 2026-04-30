@@ -1,79 +1,93 @@
-# Lesson 11: Kitchen Display System (KDS) with FlowLayoutPanel & Elapsed Timers
+# Практичний гайд 11: KDS (Kitchen Display System): черга замовлень шеф-кухаря та динамічні таймери
 
-## 1. Overview
+## 1. Теоретична база та роль KDS у ресторані
 
-In modern kitchens, thermal paper tickets are replaced by a **Kitchen Display System (KDS)**. Chefs monitor live tickets arranged horizontally, track elapsed preparation times, and "bump" orders to the next stage (Cooking -> Ready -> Served) with audio cues.
+Традиційна передача паперових чеків-бігунків на кухню призводить до хаосу: чеки губляться, засолюються жиром біля плит, черговість приготування порушується, а страви для одного столу готуються неодночасно (один гість уже поїв, а другий ще чекає свою страву).
+
+**KDS (Kitchen Display System)** — це спеціалізований цифровий монітор кухні, який:
+- Миттєво виводить замовлення у вигляді інтерактивного квитка одразу після підтвердження офіціантом на POS-касі.
+- Запускає живий таймер зворотного відліку або хронометражу часу приготування.
+- Змінює кольори квитка:
+  - 🟢 **Зелений (норма):** Пройшло < 70% нормативного часу приготування.
+  - 🟡 **Помаранчевий (увага):** Пройшло 70–100% нормативного часу.
+  - 🔴 **Червоний (прострочення):** Час приготування перевищено, квиток вимагає негайної уваги шефа.
+- Дозволяє шеф-кухарю в 1 клік змінити статус страви («Готується» -> «Готово»), сповіщаючи офіціанта в залі.
 
 ---
 
-## 2. KDS Architecture
+## 2. Архітектурна схема функціонування KDS
 
 ```mermaid
-flowchart LR
-    Orders["ITKitchenService.GetActiveKitchenOrdersAsync()"] --> KdsForm["KitchenDisplayForm"]
-    KdsForm --> Flow["FlowLayoutPanel (WrapContents = true)"]
-    Flow --> Ticket1["KitchenTicketControl #1 (New, 4m ago)"]
-    Flow --> Ticket2["KitchenTicketControl #2 (Cooking, 12m ago)"]
-    Timer["System.Windows.Forms.Timer (1 sec)"] --> UpdateTimer["Update elapsed timers on each ticket"]
+sequenceDiagram
+    autonumber
+    actor Waiter as Офіціант (POS)
+    participant Bus as Потокобезпечна шина подій
+    participant KDS as KitchenKdsForm
+    participant Timer as System.Windows.Forms.Timer (1 сек)
+    actor Chef as Шеф-кухар
+
+    Waiter->>Bus: Нове замовлення: Стіл №4 (Стейк "Рібай", 20 хв)
+    Bus->>KDS: Сигнал OnOrderCreated
+    KDS->>KDS: Додавання картки замовлення у _pnlTicketsFlow
+    
+    loop Кожну секунду (Timer_Tick)
+        Timer->>KDS: Обхід усіх активних карток
+        KDS->>KDS: Обчислення elapsed = DateTime.Now - Order.CreatedAt
+        KDS->>KDS: Оновлення бейджа: "⏱ 14:22 / 20:00 хв"
+        alt elapsed > preparationMinutes
+            KDS->>KDS: Заливка рамки червоним кольором (ThemePalette.Danger)
+            KDS->>KDS: Звуковий сигнал тривоги SystemSounds.Asterisk.Play()
+        end
+    end
+
+    Chef->>KDS: Клік "СТРАВА ГОТОВА"
+    KDS->>Bus: OnOrderItemReady(orderItemId)
+    KDS->>KDS: Анімація зникнення квитка з екрана кухні
 ```
 
 ---
 
-## 3. The KitchenTicketControl
+## 3. Детальний розбір реалізації в проєкті
 
-Each order is rendered as an isolated ticket card:
+### 3.1. Монітор кухні: [`KitchenKdsForm.cs`](file:///C:/Users/Yurii/source/repos/- MASTERY/WinForms-HoReCa-Mastery/src/HoReCa.WinForms/Forms/KitchenKdsForm.cs)
 
 ```csharp
-public partial class KitchenTicketControl : UserControl
+public class KitchenKdsForm : Form
 {
-    private readonly OrderDto _order;
-    public event EventHandler<int>? BumpRequested;
+    private readonly System.Windows.Forms.Timer _refreshTimer;
+    private readonly FlowLayoutPanel _pnlTicketsFlow;
 
-    public KitchenTicketControl(OrderDto order)
+    public KitchenKdsForm(IKitchenService kitchenService)
     {
-        _order = order;
-        InitializeComponent();
-        SetupCard();
+        _refreshTimer = new System.Windows.Forms.Timer { Interval = 1000 };
+        _refreshTimer.Tick += (s, e) => UpdateTicketTimers();
+        _refreshTimer.Start();
     }
 
-    private void SetupCard()
+    private void UpdateTicketTimers()
     {
-        lblHeader.Text = $"ЧЕК #{_order.OrderNumber} (Стіл {_order.TableNumber})";
-        lblWaiter.Text = $"Офіціант: {_order.WaiterName}";
-        
-        foreach (var item in _order.Items)
+        foreach (Control ctrl in _pnlTicketsFlow.Controls)
         {
-            var itemRow = new Label
+            if (ctrl is Panel ticket && ticket.Tag is OrderKdsDto dto)
             {
-                Text = $"{item.Quantity}x {item.ItemName}" + (string.IsNullOrEmpty(item.ModifiersOrNotes) ? "" : $" ({item.ModifiersOrNotes})"),
-                Dock = DockStyle.Top,
-                Font = new Font("Segoe UI", 10, FontStyle.Regular),
-                ForeColor = Color.White,
-                AutoSize = true
-            };
-            pnlItems.Controls.Add(itemRow);
-        }
+                var elapsed = DateTime.UtcNow - dto.CreatedAt;
+                var totalMinutes = dto.MaxPreparationMinutes;
+                var lblTimer = ticket.Controls.Find("lblTimer", true).FirstOrDefault() as Label;
 
-        btnBump.Click += (s, e) => BumpRequested?.Invoke(this, _order.Id);
-    }
-
-    public void UpdateElapsed()
-    {
-        var elapsed = DateTime.UtcNow - _order.CreatedAt.ToUniversalTime();
-        lblTimer.Text = $"{elapsed.Minutes:D2}:{elapsed.Seconds:D2}";
-
-        // Critical delay threshold (> 15 min): highlight red
-        if (elapsed.TotalMinutes >= 15)
-        {
-            pnlHeader.BackColor = ThemePalette.RubyAccent;
-        }
-        else if (elapsed.TotalMinutes >= 8)
-        {
-            pnlHeader.BackColor = Color.FromArgb(245, 158, 11); // Amber
-        }
-        else
-        {
-            pnlHeader.BackColor = ThemePalette.PrimaryAccent; // Emerald
+                if (lblTimer != null)
+                {
+                    lblTimer.Text = $"⏱ {elapsed:mm\:ss} / {totalMinutes} хв";
+                    if (elapsed.TotalMinutes >= totalMinutes)
+                    {
+                        ticket.BackColor = ThemePalette.Danger;
+                        lblTimer.ForeColor = Color.White;
+                    }
+                    else if (elapsed.TotalMinutes >= totalMinutes * 0.7)
+                    {
+                        ticket.BackColor = ThemePalette.Warning;
+                    }
+                }
+            }
         }
     }
 }
@@ -81,26 +95,15 @@ public partial class KitchenTicketControl : UserControl
 
 ---
 
-## 4. Acoustic Notifications via SystemSounds
+## 4. Підводні камені та типові помилки
 
-When a new ticket arrives from a waiter's terminal, the kitchen system plays an alert sound:
-
-```csharp
-private void PlayNewOrderSound()
-{
-    try
-    {
-        System.Media.SystemSounds.Beep.Play();
-    }
-    catch
-    {
-        // Suppress audio failures on headless environments
-    }
-}
-```
+> [!WARNING]
+> **Таймери у Windows Forms:**
+> Використовуйте саме `System.Windows.Forms.Timer`, а не `System.Timers.Timer` чи `System.Threading.Timer`. `System.Windows.Forms.Timer` спрацьовує безпосередньо в черзі повідомлень потоку UI (`WM_TIMER`), тому при зверненні до лейблів карток не виникає винятків крос-потокового доступу.
 
 ---
 
-## 5. FlowLayoutPanel Auto-Scroll & Wrapping
-
-Setting `FlowLayoutPanel.WrapContents = true` and `AutoScroll = true` guarantees tickets wrap naturally across any monitor aspect ratio (16:9, 21:9, or 4:3).
+## 5. Практичний чек-лист для закріплення
+1. [ ] Перевірити коректне спрацювання колірної сигналізації при перевищенні нормативу.
+2. [ ] Переконатися, що таймер зупиняється (`Stop()`) при закритті форми кухні.
+3. [ ] Перевірити роботу кнопки «Готово» та оновлення статусу в базі даних.

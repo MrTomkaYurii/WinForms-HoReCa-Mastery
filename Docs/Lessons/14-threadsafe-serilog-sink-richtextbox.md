@@ -1,126 +1,109 @@
-# Lesson 14: Thread-Safe Serilog Sink for Real-Time RichTextBox Diagnostics
+# Практичний гайд 14: Діагностика та аудит: потокобезпечний кастомний Serilog Sink для RichTextBox
 
-## 1. Overview
+## 1. Теоретична база та завдання живого аудиту
 
-Diagnosing issues in production desktop apps is difficult without instant log visibility. In this lesson, we build a custom **Serilog Sink** (`ILogEventSink`) that streams log entries in real-time into a `RichTextBox` control with syntax highlighting for LogLevels (Information = Green, Warning = Amber, Error = Red, Debug = Gray), completely thread-safe across background threads.
+У процесі експлуатації комплексу виникають непередбачувані ситуації (обрив зв'язку з принтером, збій фіскалізації, помилка авторизації користувача). Для швидкої локалізації проблем системним адміністраторам необхідне **вікно системного журналу в реальному часі** безпосередньо всередині робочого місця.
+
+**Виклики реалізації:**
+- **Потокобезпека:** Події логування генеруються з десятків паралельних потоків (фонові таски списання складу, таймери KDS, HTTP-запити).
+- **Підсвічування синтаксису:** Повідомлення рівня `Information`, `Warning` та `Error` мають підсвічуватися відповідними кольорами палітри.
+- **Управління пам'яттю:** Контрол `RichTextBox` не може накопичувати нескінченну кількість тексту — після 1000 рядків старі повідомлення повинні автоматично видалятися з верхівки буфера.
 
 ---
 
-## 2. Cross-Thread Logging Architecture
+## 2. Архітектурна схема конвеєра логування
 
 ```mermaid
-sequenceDiagram
-    autonumber
-    participant Worker as Background Task / EF Core
-    participant Serilog as Serilog Pipeline
-    participant Sink as SerilogRichTextBoxSink
-    participant UI as LogsViewerForm (UI Thread)
-
-    Worker->>Serilog: LogInformation("Order #42 settled")
-    Serilog->>Sink: Emit(logEvent)
-    Sink->>Sink: Check if UI handle is allocated
-    Sink->>UI: targetTextBox.BeginInvoke(Action)
-    UI->>UI: AppendText formatted with Color & Timestamp
+flowchart TD
+    AnyThread["Будь-який фоновий або UI-потік (Log.Information / Log.Error)"] --> SerilogCore["Ядро Serilog Pipeline"]
+    SerilogCore --> ConsoleSink["Console Sink (Вивід у термінал)"]
+    SerilogCore --> CustomSink["Кастомний SerilogRichTextBoxSink"]
+    
+    CustomSink --> CheckInvoke{"RichTextBox.InvokeRequired?"}
+    CheckInvoke -- Так --> BeginInvoke["RichTextBox.BeginInvoke(Action)"]
+    CheckInvoke -- Ні --> DirectExec["Пряме виконання в UI потоці"]
+    
+    BeginInvoke --> FormatMsg["Форматування рядка: [Час] [Рівень] Повідомлення"]
+    DirectExec --> FormatMsg
+    
+    FormatMsg --> ColorPick["Вибір кольору тексту: Info = Cyan, Warn = Gold, Err = Red"]
+    ColorPick --> AppendText["Додавання форматованого тексту в кінець"]
+    AppendText --> CheckLines{"Кількість рядків > 1000?"}
+    CheckLines -- Так --> Truncate["Видалення перших 200 рядків із верхівки буфера"]
+    CheckLines -- Ні --> ScrollEnd["Авто-скрол до останнього рядка"]
 ```
 
 ---
 
-## 3. Implementing SerilogRichTextBoxSink
+## 3. Детальний розбір реалізації в проєкті
+
+### 3.1. Кастомний Sink: [`SerilogRichTextBoxSink.cs`](file:///C:/Users/Yurii/source/repos/- MASTERY/WinForms-HoReCa-Mastery/src/HoReCa.WinForms/Common/SerilogRichTextBoxSink.cs)
 
 ```csharp
-using Serilog.Core;
-using Serilog.Events;
-using System.Drawing;
-using System.Windows.Forms;
-
-namespace HoReCa.WinForms.Diagnostics;
-
 public class SerilogRichTextBoxSink : ILogEventSink
 {
     private readonly RichTextBox _target;
-    private readonly int _maxLines;
+    private readonly IFormatProvider? _formatProvider;
 
-    public SerilogRichTextBoxSink(RichTextBox target, int maxLines = 1000)
+    public SerilogRichTextBoxSink(RichTextBox target, IFormatProvider? formatProvider = null)
     {
         _target = target;
-        _maxLines = maxLines;
+        _formatProvider = formatProvider;
     }
 
     public void Emit(LogEvent logEvent)
     {
-        if (_target.IsDisposed || !_target.IsHandleCreated) return;
+        if (_target.IsDisposed) return;
 
-        var message = logEvent.RenderMessage();
-        var timestamp = logEvent.Timestamp.ToString("HH:mm:ss.fff");
-        var level = logEvent.Level.ToString().ToUpperInvariant();
-        var color = GetLevelColor(logEvent.Level);
-
-        _target.BeginInvoke(new Action(() =>
+        if (_target.InvokeRequired)
         {
-            if (_target.IsDisposed) return;
+            _target.BeginInvoke(new Action(() => Emit(logEvent)));
+            return;
+        }
 
-            // Trim old lines if exceeding buffer limit
-            if (_target.Lines.Length > _maxLines)
-            {
-                _target.Select(0, _target.GetFirstCharIndexFromLine(100));
-                _target.SelectedText = "";
-            }
+        Color color = logEvent.Level switch
+        {
+            LogEventLevel.Information => ThemePalette.Info,
+            LogEventLevel.Warning => ThemePalette.Warning,
+            LogEventLevel.Error or LogEventLevel.Fatal => ThemePalette.Danger,
+            _ => ThemePalette.TextMuted
+        };
 
-            // Append Timestamp & Level
-            _target.SelectionStart = _target.TextLength;
-            _target.SelectionLength = 0;
+        var message = logEvent.RenderMessage(_formatProvider);
+        var timestamp = logEvent.Timestamp.ToString("HH:mm:ss.fff");
 
-            _target.SelectionColor = Color.DarkGray;
-            _target.AppendText($"[{timestamp}] ");
+        _target.SelectionStart = _target.TextLength;
+        _target.SelectionLength = 0;
+        _target.SelectionColor = color;
+        _target.AppendText($"[{timestamp}] [{logEvent.Level,-3}] {message}
+");
+        _target.ScrollToCaret();
 
-            _target.SelectionColor = color;
-            _target.AppendText($"[{level}] ");
-
-            _target.SelectionColor = Color.Gainsboro;
-            _target.AppendText($"{message}{Environment.NewLine}");
-
-            if (logEvent.Exception != null)
-            {
-                _target.SelectionColor = Color.Salmon;
-                _target.AppendText($"{logEvent.Exception}{Environment.NewLine}");
-            }
-
-            _target.ScrollToCaret();
-        }));
+        // Захист від переповнення пам'яті
+        if (_target.Lines.Length > 1000)
+        {
+            _target.Select(0, _target.GetFirstCharIndexFromLine(150));
+            _target.SelectedText = "";
+        }
     }
-
-    private static Color GetLevelColor(LogEventLevel level) => level switch
-    {
-        LogEventLevel.Verbose => Color.Gray,
-        LogEventLevel.Debug => Color.CornflowerBlue,
-        LogEventLevel.Information => Color.MediumSeaGreen,
-        LogEventLevel.Warning => Color.Orange,
-        LogEventLevel.Error or LogEventLevel.Fatal => Color.IndianRed,
-        _ => Color.White
-    };
 }
 ```
 
----
+### 3.2. Форма перегляду журналів: [`LogsViewerForm.cs`](file:///C:/Users/Yurii/source/repos/- MASTERY/WinForms-HoReCa-Mastery/src/HoReCa.WinForms/Forms/LogsViewerForm.cs)
 
-## 4. Attaching the Sink to the Logger
-
-In `Program.cs` or inside `LogsViewerForm`:
-
-```csharp
-public void AttachSink(RichTextBox richTextBox)
-{
-    var sink = new SerilogRichTextBoxSink(richTextBox);
-    Log.Logger = new LoggerConfiguration()
-        .MinimumLevel.Debug()
-        .WriteTo.Sink(sink)
-        .CreateLogger();
-}
-```
+Форма містить фільтрацію за рівнями логів, рядок пошуку за ключовим словом та кнопку експорту в текстовий файл.
 
 ---
 
-## 5. Key Takeaways
+## 4. Підводні камені та типові помилки
 
-1. **`BeginInvoke` vs `Invoke`**: Always use `BeginInvoke` (asynchronous message queuing) rather than `Invoke` (synchronous waiting) inside log sinks to avoid deadlock if the UI thread is waiting for the background task to complete.
-2. **Buffer Limits**: Unconstrained appending to `RichTextBox` causes memory bloat. Enforce a maximum line threshold (e.g. 1000 lines).
+> [!WARNING]
+> **Блокуючий `Invoke` vs неблокуючий `BeginInvoke`:**
+> Ніколи не використовуйте `_target.Invoke()` всередині Serilog Sink! Якщо фоновий потік генерує сотні повідомлень логу під час блокування UI-потоку, використання синхронного `Invoke` призведе до мертвого блокування (*Deadlock*). Використовуйте виключно асинхронний `BeginInvoke`.
+
+---
+
+## 5. Практичний чек-лист для закріплення
+1. [ ] Перевірити появу логу при старті та зміні статусів замовлень.
+2. [ ] Переконатися, що помилки підсвічуються червоним кольором.
+3. [ ] Перевірити роботу автоматичного очищення старих рядків при досягненні ліміту.

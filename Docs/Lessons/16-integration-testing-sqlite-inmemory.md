@@ -1,28 +1,58 @@
-# Lesson 16: Integration Testing with EF Core & SQLite In-Memory
+# Практичний гайд 16: Інтеграційне тестування бізнес-сервісів через EF Core SQLite In-Memory
 
-## 1. Overview
+## 1. Теоретична база: Чому SQLite In-Memory замість EF Core InMemory Provider
 
-Unit tests with mocks are valuable, but testing real database behavior (indexes, foreign key cascades, migrations, and LINQ translations) requires an actual relational database engine. In this lesson, we write automated integration tests using **SQLite in-memory mode** (`DataSource=:memory:`).
+При написанні інтеграційних тестів для сервісів (наприклад, [`TablePosService`](file:///C:/Users/Yurii/source/repos/- MASTERY/WinForms-HoReCa-Mastery/src/HoReCa.Infrastructure/Services/TablePosService.cs) або `RoomBookingService`) розробники часто роблять помилку, обираючи провайдер `UseInMemoryDatabase()`.
+
+**Проблеми стандартного InMemory провайдера EF Core:**
+- Він **не перевіряє зовнішні ключі (Foreign Keys)**. Ви можете зберегти рядок `OrderItem` з неіснуючим `MenuItemId`, і тест успішно пройде, але впаде в продакшені на реальному PostgreSQL.
+- Він не підтримує транзакції (`BeginTransactionAsync()` падає або ігнорується).
+- Не підтримує точність чисел `decimal` та SQL-функції.
+
+**Правильне інженерне рішення: SQLite In-Memory:**
+- Повноцінний реляційний SQL-рушій, що працює в оперативній пам'яті.
+- Вимагає відкритого `SqliteConnection("DataSource=:memory:")`, який тримає базу активною протягом життя тесту.
+- 100% перевірка зв'язків між таблицями, каскадного видалення та унікальних індексів.
 
 ---
 
-## 2. In-Memory SQLite Setup Pattern
+## 2. Архітектурна схема ізоляції інтеграційного тесту
 
-In SQLite, an in-memory database exists only as long as its underlying physical `SqliteConnection` stays open. We open the connection once in the test fixture's constructor and pass it into `DbContextOptionsBuilder`:
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Test as Інтеграційний тест (xUnit)
+    participant Conn as SqliteConnection ("DataSource=:memory:")
+    participant Context as HoReCaDbContext
+    participant Svc as TablePosService
+
+    Test->>Conn: conn = new SqliteConnection("DataSource=:memory:")
+    Test->>Conn: conn.Open() (База даних створена в RAM)
+    Test->>Context: optionsBuilder.UseSqlite(conn).Options
+    Test->>Context: context.Database.EnsureCreated() (Створення таблиць)
+    Test->>Context: Посів початкових тестових даних (Стіл №1, 2 страви)
+    
+    Test->>Svc: svc = new TablePosService(factory)
+    Test->>Svc: svc.CreateOrderAsync(tableId: 1, items)
+    Svc->>Context: Збереження замовлення в RAM-базу
+    
+    Test->>Context: Прямий SQL-запит перевірки збереження замовлення
+    Context-->>Test: Assert: Order збережено, статус столу = Occupied
+    
+    Test->>Conn: conn.Close(); conn.Dispose() (Повне видалення RAM-бази)
+```
+
+---
+
+## 3. Детальний розбір реалізації в проєкті
+
+### 3.1. Інтеграційний тест: `TablePosServiceTests.cs`
 
 ```csharp
 public class TablePosServiceTests : IDisposable
 {
     private readonly SqliteConnection _connection;
     private readonly DbContextOptions<HoReCaDbContext> _options;
-    private readonly TablePosService _service;
-
-    private class TestDbContextFactory(DbContextOptions<HoReCaDbContext> options) : IDbContextFactory<HoReCaDbContext>
-    {
-        public HoReCaDbContext CreateDbContext() => new(options);
-        public Task<HoReCaDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default)
-            => Task.FromResult(new HoReCaDbContext(options));
-    }
 
     public TablePosServiceTests()
     {
@@ -33,17 +63,42 @@ public class TablePosServiceTests : IDisposable
             .UseSqlite(_connection)
             .Options;
 
-        using var initContext = new HoReCaDbContext(_options);
-        initContext.Database.EnsureCreated();
+        using var context = new HoReCaDbContext(_options);
+        context.Database.EnsureCreated();
 
-        // Seed initial reference tables
-        SeedInitialData(initContext);
+        // Початкові дані
+        context.Tables.Add(new RestaurantTable { Id = 1, TableNumber = 1, Status = TableStatus.Free, Capacity = 4 });
+        context.MenuItems.Add(new MenuItem { Id = 1, Name = "Стейк Рібай", Price = 380m, IsAvailable = true });
+        context.SaveChanges();
+    }
 
-        _service = new TablePosService(new TestDbContextFactory(_options));
+    [Fact]
+    public async Task CreateOrderAsync_ValidItems_SavesOrderAndUpdatesTableStatus()
+    {
+        // Arrange
+        var factory = new TestDbContextFactory(_options);
+        var service = new TablePosService(factory);
+        var items = new List<OrderItemRequestDto> { new(MenuItemId: 1, Quantity: 2, Notes: "Well-done") };
+
+        // Act
+        var result = await service.CreateOrderAsync(tableId: 1, items);
+
+        // Assert
+        result.Success.Should().BeTrue();
+        
+        await using var verifyContext = new HoReCaDbContext(_options);
+        var table = await verifyContext.Tables.FindAsync(1);
+        table!.Status.Should().Be(TableStatus.Occupied);
+
+        var savedOrder = await verifyContext.Orders.Include(o => o.Items).FirstOrDefaultAsync();
+        savedOrder.Should().NotBeNull();
+        savedOrder!.Items.Should().HaveCount(1);
+        savedOrder.Items[0].TotalPrice.Should().Be(760m); // 2 * 380 ₴
     }
 
     public void Dispose()
     {
+        _connection.Close();
         _connection.Dispose();
     }
 }
@@ -51,41 +106,15 @@ public class TablePosServiceTests : IDisposable
 
 ---
 
-## 3. Verifying End-to-End Service Workflows
+## 4. Підводні камені та типові помилки
 
-```csharp
-[Fact]
-public async Task CloseOrderAndPayAsync_ShouldMarkOrderPaidAndFreeTable()
-{
-    // Arrange: Create an active order on Table #10
-    using var context = new HoReCaDbContext(_options);
-    var table = await context.Tables.FirstAsync();
-    var item = await context.MenuItems.FirstAsync();
-
-    var orderDto = await _service.CreateOrderAsync(new CreateOrderRequest(
-        table.Id, null, "Ігор", new List<CreateOrderItemRequest> { new(item.Id, 1, null) }));
-
-    // Act: Settle the bill with Credit Card
-    await _service.CloseOrderAndPayAsync(orderDto.Id, PaymentMethod.CreditCard, 45m);
-
-    // Assert: Check database state in a fresh DbContext
-    using var verifyContext = new HoReCaDbContext(_options);
-    var updatedOrder = await verifyContext.Orders.FindAsync(orderDto.Id);
-    updatedOrder!.Status.Should().Be(OrderStatus.Paid);
-
-    var updatedTable = await verifyContext.Tables.FindAsync(table.Id);
-    updatedTable!.Status.Should().Be(TableStatus.Free);
-
-    var payment = await verifyContext.Payments.FirstOrDefaultAsync(p => p.OrderId == orderDto.Id);
-    payment.Should().NotBeNull();
-    payment!.Amount.Should().Be(45m);
-    payment.Method.Should().Be(PaymentMethod.CreditCard);
-}
-```
+> [!WARNING]
+> **Життєвий цикл SqliteConnection:**
+> База даних у пам'яті SQLite існує рівно стільки, скільки відкрито об'єкт `SqliteConnection`. Якщо ви закриєте конекшн або створите новий `DbContext` без передачі існуючого з'єднання, база буде миттєво знищена разом із усіма щойно збереженими даними.
 
 ---
 
-## 4. Key Takeaways
-
-1. **Isolation**: Every test class execution gets its own pristine in-memory database instance, guaranteeing zero test pollution.
-2. **Factory Emulation**: The lightweight `TestDbContextFactory` perfectly mirrors the production `IDbContextFactory` registered by Generic Host.
+## 5. Практичний чек-лист для закріплення
+1. [ ] Перевірити наявність класу фікстури тесту з реалізацією `IDisposable`.
+2. [ ] Переконатися, що перед виконанням тесту викликається `context.Database.EnsureCreated()`.
+3. [ ] Перевірити тест на сценарій спроби створення замовлення для вже зайнятого столу.

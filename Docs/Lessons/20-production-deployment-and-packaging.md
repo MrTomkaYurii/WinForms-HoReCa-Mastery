@@ -1,71 +1,81 @@
-# Lesson 20: Production Packaging & Self-Contained Deployment
+# Практичний гайд 20: Підготовка до продакшену, Single-File публікація та розгортання
 
-## 1. Overview
+## 1. Теоретична база та сценарії дистрибуції
 
-Delivering a Windows Forms application to end-user workstations or POS terminals requires predictable packaging. Modern .NET 10 enables compiling the application into a **Single-File Self-Contained Executable** that runs without requiring a pre-installed .NET Runtime on the target machine.
+На фінальному етапі розробки десктопного рішення для сектору HoReCa постає завдання розгортання:
+- Застосунок повинен встановлюватися на сенсорні моноблоки касирів, робочі станції портьє та кухонні планшети з мінімальними вимогами до ІТ-персоналу.
+- На клієнтських комп'ютерах **може бути не встановлений .NET SDK або .NET Runtime**.
+- Застосунок повинен бути зібраний як єдиний виконуваний файл (*Single-File Executable*) з усіма вбудованими ресурсами (іконками, шрифтами, емблемою).
 
 ---
 
-## 2. Publishing Strategies
+## 2. Архітектурна схема конвеєра публікації
 
 ```mermaid
-graph TD
-    Source["C# Source Code (.NET 10)"] --> CLI["dotnet publish"]
-    CLI --> FrameworkDep["Framework-Dependent (.NET 10 Runtime required on PC)"]
-    CLI --> SelfContained["Self-Contained (Bundles .NET Runtime inside EXE)"]
-    SelfContained --> SingleFile["Single-File Executable (~60-70 MB)"]
-    SingleFile --> Target["Production POS Terminal / Front-Desk PC"]
+flowchart TD
+    DevCode["Вихідний код рішень (.NET 10 LTS WinForms)"] --> Tests["Запуск регресійних тестів: dotnet test (30/30 Passed)"]
+    Tests --> PublishCmd["Команда dotnet publish з прапорцями оптимізації"]
+    
+    PublishCmd --> Flag1["-c Release (Оптимізація коду компілятором Roslyn)"]
+    PublishCmd --> Flag2["-r win-x64 (Цільова платформа Windows 64-bit)"]
+    PublishCmd --> Flag3["--self-contained true (Включення .NET 10 Runtime у бандл)"]
+    PublishCmd --> Flag4["-p:PublishSingleFile=true (Упаковка в єдиний EXE-файл)"]
+    
+    Flag1 & Flag2 & Flag3 & Flag4 --> OutputExe["Готовий виконуваний файл: LuxeResto.exe (~80-100 МБ)"]
+    OutputExe --> CopyAssets["Копіювання конфігурації appsettings.json та папки Assets"]
+    CopyAssets --> ReadyDeploy["Готово до розгортання на терміналах ресторану та готелю"]
 ```
 
 ---
 
-## 3. CLI Publishing Commands
+## 3. Детальний розбір команди публікації
 
-### 1. Single-File Self-Contained Deployment (Windows x64)
+### 3.1. Команда збірки самодостатнього пакету:
 
 ```powershell
-dotnet publish src/HoReCa.WinForms/HoReCa.WinForms.csproj `
+dotnet publish "src/HoReCa.WinForms/HoReCa.WinForms.csproj" `
     -c Release `
     -r win-x64 `
     --self-contained true `
     -p:PublishSingleFile=true `
     -p:IncludeNativeLibrariesForSelfExtract=true `
     -p:EnableCompressionInSingleFile=true `
-    -o ./publish/win-x64
+    -o "./publish/win-x64"
 ```
 
-### 2. Framework-Dependent Lightweight Deployment
-
-If all client machines already have .NET 10 Runtime installed:
-
-```powershell
-dotnet publish src/HoReCa.WinForms/HoReCa.WinForms.csproj `
-    -c Release `
-    -o ./publish/framework-dependent
-```
-
----
-
-## 4. Crucial Publishing Settings in `.csproj`
-
-Ensure `appsettings.json` is automatically copied to the output folder:
+### 3.2. Налаштування файлу проєкту: [`HoReCa.WinForms.csproj`](file:///C:/Users/Yurii/source/repos/- MASTERY/WinForms-HoReCa-Mastery/src/HoReCa.WinForms/HoReCa.WinForms.csproj)
 
 ```xml
+<PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+</PropertyGroup>
+
 <ItemGroup>
-  <None Update="appsettings.json">
-    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-  </None>
+    <None Update="appsettings.json">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Assets\**">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
 </ItemGroup>
 ```
 
 ---
 
-## 5. Summary & Graduation Checklist
+## 4. Підводні камені та типові помилки
 
-Congratulations! You have completed the **WinForms HoReCa Mastery** curriculum. You now have the skills to build:
-- Clean Architecture enterprise systems in modern Windows Forms.
-- High-performance, flicker-free custom GDI+ controls.
-- Full asynchronous concurrency with `IDbContextFactory` and Entity Framework Core 10.
-- Touchscreen point-of-sale interfaces and KDS kitchen automation boards.
-- Fiscal receipt generation and printing subsystems.
-- Thorough automated unit and integration test suites.
+> [!WARNING]
+> **Шляхи до файлів у Single-File застосунках:**
+> У Single-File виконуваному файлі `Assembly.GetExecutingAssembly().Location` повертає порожній рядок або тимчасову системну папку розпаковки (`Temp`). Завжди використовуйте `AppContext.BaseDirectory` для визначення фізичного розташування файлів поруч із `.exe` (наприклад, для папки `Assets` та бази `horeca_local.db`).
+
+---
+
+## 5. Практичний чек-лист для закріплення
+1. [ ] Перевірити працездатність скомпільованого `.exe` на «чистій» машині без встановленого .NET SDK.
+2. [ ] Переконатися, що папка `Assets/Images` скопійована поруч із виконуваним файлом.
+3. [ ] Перевірити коректність створення файлу бази даних при першому запуску.

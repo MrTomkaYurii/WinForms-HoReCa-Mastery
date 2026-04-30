@@ -1,77 +1,74 @@
-# Lesson 18: Custom OwnerDraw & Flicker-Free GDI+ Rendering
+# Практичний гайд 18: Кастомний рендеринг OwnerDraw, Double Buffering та ліквідація мерехтіння
 
-## 1. Overview
+## 1. Теоретична база: Чому виникає мерехтіння (Flickering)
 
-Default Windows Forms controls often suffer from noticeable flickering during resizing or rapid redrawing. This happens because Windows erases the background with `WM_ERASEBKGND` before redrawing the foreground with `WM_PAINT`. In this lesson, we eliminate flicker using double buffering and advanced GDI+ rendering.
+У графічній підсистемі Windows Forms перемальовування контрола за замовчуванням відбувається у два окремі етапи:
+1. Повідомлення `WM_ERASEBKGND`: Windows зафарбовує фоновий прямокутник стандартним кольором (найчастіше світло-сірим).
+2. Повідомлення `WM_PAINT`: Контрол малює поверх фону свій текст, рамки та зображення.
 
----
-
-## 2. Double Buffering & Control Styles
-
-To eradicate flickering, any custom control or form must set the following flags in its constructor:
-
-```csharp
-public class BaseCustomControl : Control
-{
-    public BaseCustomControl()
-    {
-        SetStyle(ControlStyles.AllPaintingInWmPaint |
-                 ControlStyles.UserPaint |
-                 ControlStyles.OptimizedDoubleBuffer |
-                 ControlStyles.ResizeRedraw |
-                 ControlStyles.SupportsTransparentBackColor, true);
-
-        DoubleBuffered = true;
-        UpdateStyles();
-    }
-}
-```
-
-### Explanation of Styles
-
-| Style | Purpose |
-| :--- | :--- |
-| `AllPaintingInWmPaint` | Ignores `WM_ERASEBKGND` messages, preventing the white flash before paint. |
-| `UserPaint` | Tells Windows that the control paints itself rather than delegating to the OS. |
-| `OptimizedDoubleBuffer` | Renders all graphics into an offscreen memory buffer before blitting to the display. |
-| `ResizeRedraw` | Automatically triggers a full repaint whenever width or height changes. |
+Коли форма містить багато елементів або користувач перетягує столик на карті залів, між цими двома етапами проходить кілька мілісекунд. Людське око фіксує проміжний стан фону — виникає відчуття розриву картинки та **дратівливого мерехтіння (flickering)**.
 
 ---
 
-## 3. High-Fidelity GDI+ Settings
+## 2. Механізм апаратної подвійної буферизації (Double Buffering)
 
-When implementing `OnPaint(PaintEventArgs e)`:
+Замість прямого малювання на екранній поверхні відеокарти:
+1. Виділяється невидимий буфер у пам'яті (*Off-screen Bitmap*).
+2. Усі операції GDI+ (фон, лінії, закруглені кути, шрифти) малюються у віртуальний буфер.
+3. Готова скомпільована картинка за один атомарний виклик Win32 API функції `BitBlt` копіюється на екран. Мерехтіння стає фізично неможливим.
 
-```csharp
-protected override void OnPaint(PaintEventArgs e)
-{
-    var g = e.Graphics;
-
-    // Set GDI+ Quality Modes
-    g.SmoothingMode = SmoothingMode.AntiAlias;
-    g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
-    g.InterpolationMode = InterpolationMode.HighQualityBicubic;
-    g.PixelOffsetMode = PixelOffsetMode.HighQuality;
-
-    // Paint custom visual elements
-    RenderControl(g);
-}
+```mermaid
+flowchart LR
+    subgraph SingleBuffer["Без буферизації (Мерехтіння)"]
+        A1["1. Очистка фону (WM_ERASEBKGND)"] -->|Око бачить білий спалах| A2["2. Малювання ліній та тексту (WM_PAINT)"]
+    end
+    
+    subgraph DoubleBuffered["З Double Buffering (Плавність 60 FPS)"]
+        B1["Віртуальний буфер у пам'яті (Memory DC)"] -->|Всі операції малювання виконуються тут| B2["Готове зображення"]
+        B2 -->|Атомарне копіювання BitBlt| B3["Екран монітора (Миттєва зміна кадру)"]
+    end
 ```
 
 ---
 
-## 4. Double Buffering DataGridView via Reflection
+## 3. Детальний розбір реалізації в проєкті
 
-`DataGridView` has a protected `DoubleBuffered` property that is `false` by default. We can enable it via an extension method:
+### 3.1. Активація подвійної буферизації у віджетах: [`FloorTableWidget.cs`](file:///C:/Users/Yurii/source/repos/- MASTERY/WinForms-HoReCa-Mastery/src/HoReCa.WinForms/Controls/FloorTableWidget.cs)
+
+У конструкторі кастомного контрола вмикаються системні прапорці стилю:
 
 ```csharp
-public static class WinFormsExtensions
+public FloorTableWidget()
 {
-    public static void EnableDoubleBuffering(this DataGridView dgv)
-    {
-        typeof(DataGridView)
-            .GetProperty("DoubleBuffered", BindingFlags.Instance | BindingFlags.NonPublic)?
-            .SetValue(dgv, true, null);
-    }
+    SetStyle(
+        ControlStyles.AllPaintingInWmPaint | // Ігнорувати WM_ERASEBKGND, малювати фон у WM_PAINT
+        ControlStyles.UserPaint |            // Малювати самостійно, без втручання стандартного Win32
+        ControlStyles.OptimizedDoubleBuffer |// Активація внутрішнього віртуального буфера
+        ControlStyles.ResizeRedraw |         // Перемальовувати при зміні розмірів
+        ControlStyles.SupportsTransparentBackColor, true);
+
+    UpdateStyles();
+    DoubleBuffered = true;
 }
 ```
+
+### 3.2. Управління пам'яттю GDI+ дескрипторів: [`ThemePalette.cs`](file:///C:/Users/Yurii/source/repos/- MASTERY/WinForms-HoReCa-Mastery/src/HoReCa.WinForms/Common/ThemePalette.cs)
+
+Створення `new Font("Segoe UI", 12f)` всередині методу `OnPaint` під час руху миші створює сотні нових GDI-об'єктів за секунду. Коли їхня кількість сягає ліміту ОС (10 000 дескрипторів), застосунок падає. 
+
+**Рішення:** Кешування шрифтів у статичному класі [`ThemePalette`](file:///C:/Users/Yurii/source/repos/- MASTERY/WinForms-HoReCa-Mastery/src/HoReCa.WinForms/Common/ThemePalette.cs) або утилізація локальних ресурсів через `using var pen = new Pen(...)`.
+
+---
+
+## 4. Підводні камені та типові помилки
+
+> [!WARNING]
+> **Не забувайте вимикати SmoothingMode для чітких ліній:**
+> Режим `SmoothingMode.AntiAlias` чудово підходить для заокруглених кутів та кіл, але для прямих 1-піксельних розділювачів він робить лінію розмитою (напівпрозорою 2-піксельною). Для сіток та розділювачів вимикайте згладжування: `g.SmoothingMode = SmoothingMode.None`.
+
+---
+
+## 5. Практичний чек-лист для закріплення
+1. [ ] Перевірити, що всі кастомні віджети мають увімкнений `DoubleBuffered = true`.
+2. [ ] Перевірити відсутність витоку GDI-дескрипторів у диспетчері завдань Windows (колонки «GDI Objects» та «USER Objects»).
+3. [ ] Переконатися, що перетягування столів відбувається абсолютно плавно.

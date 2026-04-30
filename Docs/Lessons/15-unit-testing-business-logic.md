@@ -1,96 +1,89 @@
-# Lesson 15: Unit Testing Domain & Application Business Logic
+# Практичний гайд 15: Модульне тестування (Unit Testing) бізнес-логіки та калькуляцій (xUnit)
 
-## 1. Overview
+## 1. Теоретична база та стратегія тестування
 
-A critical requirement of modern enterprise architecture is full testability. By decoupling domain entities and application services from Windows Forms UI code, we can test calculations, validators, and service workflows rapidly with **xUnit** and **FluentAssertions**.
+У фінансових та ресторанних системах тестування через графічний інтерфейс вручну займає занадто багато часу та не гарантує покриття всіх крайових випадків (*Edge Cases*):
+- Чи правильно нараховуються чайові при наявності акційної знижки?
+- Що відбувається при спробі додати страву з від'ємною кількістю порцій?
+- Чи генерується коректний статус дефіциту, коли залишок товару рівно дорівнює страховому запасу?
 
----
-
-## 2. Test Project Architecture
-
-The test suite is structured as:
-```
-tests/HoReCa.Tests/
-├── UnitTests/
-│   ├── OrderServiceTests.cs       # Entity calculations & discounts
-│   ├── BookingValidatorTests.cs   # FluentValidation date/phone checks
-│   ├── OrderValidatorTests.cs     # Order request validation rules
-│   └── InventoryAndPrinterTests.cs# Low stock computation & fiscal string formatting
-└── IntegrationTests/
-    └── TablePosServiceTests.cs    # EF Core SQLite in-memory integration
-```
+У проєкті [`HoReCa.Tests`](file:///C:/Users/Yurii/source/repos/- MASTERY/WinForms-HoReCa-Mastery/tests/HoReCa.Tests) реалізовано набір модульних тестів за допомогою фреймворків **xUnit** та **FluentAssertions**.
 
 ---
 
-## 3. Testing Domain Entity Calculations
+## 2. Архітектурна схема структури тестів (AAA Pattern)
 
-Testing that business logic remains correct under discounts and item mutations:
+```mermaid
+flowchart TD
+    Test["Модульний тест (xUnit [Fact] / [Theory])"] --> Arrange["1. Arrange (Підготовка даних)"]
+    Arrange --> A1["Створення екземпляра Order"]
+    Arrange --> A2["Додавання тестових страв (Ціна, Кількість)"]
+    
+    A1 & A2 --> Act["2. Act (Виконання бізнес-дії)"]
+    Act --> B1["Виклик order.RecalculateTotals(discount: 10, tip: 5)"]
+    
+    B1 --> Assert["3. Assert (Перевірка очікуваного результату)"]
+    Assert --> C1["order.SubTotal.Should().Be(500.00m)"]
+    Assert --> C2["order.DiscountAmount.Should().Be(50.00m)"]
+    Assert --> C3["order.TotalAmount.Should().Be(472.50m)"]
+```
+
+---
+
+## 3. Детальний розбір реалізації в проєкті
+
+### 3.1. Юніт-тести калькуляцій замовлення: `OrderCalculationsTests.cs`
 
 ```csharp
-[Fact]
-public void RecalculateTotals_WithDiscount_ShouldApplyDiscountCorrectly()
+public class OrderCalculationsTests
 {
-    // Arrange
-    var order = new Order
+    [Fact]
+    public void RecalculateTotals_WithDiscountAndTip_CalculatesCorrectFinancials()
     {
-        OrderNumber = "ORD-TEST-002",
-        DiscountPercent = 15m // 15% discount
-    };
+        // Arrange
+        var order = new Order { OrderNumber = "TEST-01" };
+        order.Items.Add(new OrderItem { Quantity = 2, UnitPrice = 200m }); // 400 ₴
+        order.Items.Add(new OrderItem { Quantity = 1, UnitPrice = 100m }); // 100 ₴
+        // SubTotal = 500 ₴
 
-    order.Items.Add(new OrderItem
-    {
-        Quantity = 1,
-        UnitPrice = 1000m,
-        Status = OrderStatus.New
-    });
+        // Act: 10% знижки, 5% чайових, 5% податку
+        order.RecalculateTotals(discountPercent: 10, tipPercent: 5, taxRate: 0.05m);
 
-    // Act
-    order.RecalculateTotals();
+        // Assert
+        order.SubTotal.Should().Be(500.00m);
+        order.DiscountAmount.Should().Be(50.00m); // 500 * 0.10
+        order.TaxAmount.Should().Be(22.50m);       // (500 - 50) * 0.05
+        order.TipAmount.Should().Be(22.50m);       // (500 - 50) * 0.05
+        order.TotalAmount.Should().Be(495.00m);     // 450 + 22.50 + 22.50
+    }
+}
+```
 
-    // Assert
-    order.Subtotal.Should().Be(1000m);
-    order.TotalAmount.Should().Be(850m); // 1000 - 15%
+### 3.2. Тестування порогів складу: `InventoryThresholdTests.cs`
+
+```csharp
+[Theory]
+[InlineData(10.0, 5.0, false)]  // Залишок 10 > поріг 5 -> Норма
+[InlineData(5.0, 5.0, true)]    // Залишок 5 == поріг 5 -> Дефіцит
+[InlineData(2.5, 5.0, true)]    // Залишок 2.5 < поріг 5 -> Дефіцит
+public void InventoryItem_IsLowStock_DetectsThresholdCorrectly(decimal stock, decimal threshold, bool expectedLow)
+{
+    var item = new InventoryItem { CurrentStock = stock, SafetyThreshold = threshold };
+    item.IsLowStock.Should().Be(expectedLow);
 }
 ```
 
 ---
 
-## 4. Testing FluentValidation Rules
+## 4. Підводні камені та типові помилки
 
-Using `FluentValidation.TestHelper` to verify that invalid input combinations produce expected error messages:
-
-```csharp
-[Fact]
-public void Validator_WhenCheckOutDateBeforeCheckIn_ShouldHaveValidationError()
-{
-    // Arrange
-    var validator = new CreateBookingRequestValidator();
-    var request = new CreateBookingRequest(
-        RoomId: 1,
-        GuestFullName: "Тарас Шевченко",
-        GuestPhone: "+38 (067) 111-22-33",
-        GuestEmail: "taras@example.com",
-        PassportOrId: "AA123456",
-        CheckInDate: DateTime.Today.AddDays(5),
-        CheckOutDate: DateTime.Today.AddDays(3), // Invalid: before check-in!
-        SpecialRequests: null
-    );
-
-    // Act
-    var result = validator.TestValidate(request);
-
-    // Assert
-    result.ShouldHaveValidationErrorFor(x => x.CheckOutDate)
-        .WithErrorMessage("Дата виїзду має бути пізнішою за дату заїзду.");
-}
-```
+> [!TIP]
+> **Тестуйте чисту доменну модель:**
+> Unit-тести повинні виконуватися за частки мілісекунди. Вони не повинні підключатися до реальної бази даних, запускати хост чи створювати екземпляри Windows Forms.
 
 ---
 
-## 5. Running the Test Suite
-
-Execute the tests via the .NET CLI:
-```bash
-dotnet test tests/HoReCa.Tests/HoReCa.Tests.csproj
-```
-All 16 unit and integration tests run in under 2 seconds.
+## 5. Практичний чек-лист для закріплення
+1. [ ] Запустити тести через консоль: `dotnet test`.
+2. [ ] Переконатися, що всі 30 тестів проходять зі статусом `Passed`.
+3. [ ] Додати параметризований тест `[Theory]` для перевірки нульової кількості страв.

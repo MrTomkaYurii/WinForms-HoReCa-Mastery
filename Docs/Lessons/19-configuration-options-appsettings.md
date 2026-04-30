@@ -1,25 +1,51 @@
-# Lesson 19: Configuration Patterns & Options Binding via appsettings.json
+# Практичний гайд 19: Управління конфігурацією: патерн IOptions, appsettings.json та змінні середовища
 
-## 1. Overview
+## 1. Теоретична база: Чому не `ConfigurationManager.AppSettings`
 
-Enterprise software must never hardcode connection strings, business names, tax rates, or printer names. In this lesson, we bind strongly-typed options from `appsettings.json` into the DI container using `IOptions<T>`.
+У старих проєктних шаблонах конфігурація зчитувалася через `App.config` за допомогою застарілого `ConfigurationManager.AppSettings["MyKey"]`. Такий підхід має суттєві недоліки:
+- Тільки плоска структура типу «ключ-значення» без вкладеності.
+- Відсутність типізації (все повертається як звичайний рядок `string`).
+- Неможливість динамічного перезавантаження конфігурації без перезапуску застосунку (*Reload on Change*).
+
+У **.NET 10** використовується сучасний конфігураційний конвеєр на базі **Microsoft.Extensions.Configuration** та патерну **Options Pattern** (`IOptions<T>`, `IOptionsSnapshot<T>`).
 
 ---
 
-## 2. Configuration Structure (`appsettings.json`)
+## 2. Архітектурна схема зчитування та пріоритетів конфігурації
+
+```mermaid
+flowchart TD
+    ConfigBuild["Побудова IConfiguration"] --> BaseJson["1. Базовий файл appsettings.json"]
+    BaseJson --> EnvJson["2. Специфічний файл appsettings.{Environment}.json (напр. Development)"]
+    EnvJson --> EnvVars["3. Змінні середовища ОС (Environment Variables)"]
+    EnvVars --> CmdArgs["4. Аргументи командного рядка (Command Line Args)"]
+    
+    CmdArgs --> MergedConfig["Об'єднана конфігурація (Вищий рівень перекриває нижчий)"]
+    MergedConfig --> BindModel["Автоматичний біндінг у типізований клас HoReCaSettings"]
+    BindModel --> DIInject["Впровадження через DI: IOptions<HoReCaSettings> у конструктори"]
+```
+
+---
+
+## 3. Детальний розбір реалізації в проєкті
+
+### 3.1. Структура файлу `appsettings.json`
 
 ```json
 {
   "Database": {
-    "Provider": "Sqlite",
-    "ConnectionString": "Data Source=horeca_mastery.db"
+    "Provider": "Sqlite"
+  },
+  "ConnectionStrings": {
+    "DefaultConnection": "Data Source=horeca_local.db",
+    "PostgreSql": "Host=localhost;Port=5432;Database=horeca_db;Username=postgres;Password=postgres",
+    "SqliteFallback": "Data Source=horeca_local.db"
   },
   "HoReCaSettings": {
-    "BusinessName": "GrandLux Hotel & Restaurant",
-    "TaxRatePercent": 20.0,
-    "DefaultServiceChargePercent": 5.0,
-    "ReceiptPrinterName": "POS-80C",
-    "KdsRefreshIntervalSeconds": 5
+    "BusinessName": "GrandLux Resort & Restaurant",
+    "Currency": "UAH",
+    "AutoSeedDemoData": true,
+    "DefaultTaxRate": 0.05
   },
   "Serilog": {
     "MinimumLevel": "Information"
@@ -27,58 +53,33 @@ Enterprise software must never hardcode connection strings, business names, tax 
 }
 ```
 
----
-
-## 3. Strongly-Typed Options Class
+### 3.2. Типізований клас налаштувань та реєстрація
 
 ```csharp
-public class HoReCaOptions
+public class HoReCaSettings
 {
-    public const string SectionName = "HoReCaSettings";
-
-    public string BusinessName { get; set; } = "GrandLux Hotel & Restaurant";
-    public decimal TaxRatePercent { get; set; } = 20.0m;
-    public decimal DefaultServiceChargePercent { get; set; } = 0m;
-    public string ReceiptPrinterName { get; set; } = "Default";
-    public int KdsRefreshIntervalSeconds { get; set; } = 5;
+    public string BusinessName { get; set; } = "GrandLux";
+    public string Currency { get; set; } = "UAH";
+    public bool AutoSeedDemoData { get; set; } = true;
+    public decimal DefaultTaxRate { get; set; } = 0.05m;
 }
+
+// Реєстрація в Program.cs:
+services.Configure<HoReCaSettings>(context.Configuration.GetSection("HoReCaSettings"));
 ```
 
 ---
 
-## 4. Registering & Consuming Options
+## 4. Підводні камені та типові помилки
 
-### Registration in `Program.cs`
-
-```csharp
-services.Configure<HoReCaOptions>(
-    configuration.GetSection(HoReCaOptions.SectionName));
-```
-
-### Consumption in Services & Forms
-
-```csharp
-public class ReceiptPrinterEngine : IReceiptPrintService
-{
-    private readonly HoReCaOptions _options;
-
-    public ReceiptPrinterEngine(IOptions<HoReCaOptions> options)
-    {
-        _options = options.Value;
-    }
-
-    public void PrintReceipt(OrderDto order, string cashierName)
-    {
-        // Use configured business name and printer
-        string text = ReceiptTextFormatter.GenerateTextReceipt(order, _options.BusinessName, cashierName);
-        // ...
-    }
-}
-```
+> [!TIP]
+> **Властивість файлу 'Copy to Output Directory':**
+> Найчастіша помилка розробників WinForms — забути налаштувати властивість файлу `appsettings.json`. Переконайтеся, що у файлі проєкту `.csproj` прописано:
+> `<None Update="appsettings.json"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></None>`. Без цього файл не потрапить до папки `bin/`, і програма не знайде налаштувань при старті.
 
 ---
 
-## 5. Key Takeaways
-
-1. **`IOptionsSnapshot<T>`**: In long-running desktop apps, using `IOptionsSnapshot<T>` allows reading updated configuration changes immediately when `appsettings.json` is edited on disk without restarting the application.
-2. **Environment Variable Overrides**: Cloud deployments or staging CI can override settings via `HoReCaSettings__BusinessName="Staging Complex"`.
+## 5. Практичний чек-лист для закріплення
+1. [ ] Перевірити наявність файлу `appsettings.json` у вихідній директорії бінарних файлів.
+2. [ ] Перевірити зчитування назви бізнесу та валюти через `IOptions<HoReCaSettings>`.
+3. [ ] Переконатися, що секретні паролі до БД можна передати через системну змінну `ConnectionStrings__PostgreSql`.
