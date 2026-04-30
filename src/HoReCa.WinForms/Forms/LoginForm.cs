@@ -120,7 +120,7 @@ public class LoginForm : BaseForm
         flpDemoButtons.Controls.Add(CreateDemoCard("🍽️ Офіціант", "waiter / PIN: 2222", "Столики, замовлення, POS", UserRole.Waiter, ThemePalette.Success));
         flpDemoButtons.Controls.Add(CreateDemoCard("🏨 Рецепція", "reception / PIN: 3333", "Шахматка, гості, бронь", UserRole.Receptionist, ThemePalette.Info));
         flpDemoButtons.Controls.Add(CreateDemoCard("👨‍🍳 Шеф-кухар", "chef / PIN: 4444", "KDS екран, таймери кухні", UserRole.Chef, ThemePalette.Warning));
-        flpDemoButtons.Controls.Add(CreateDemoCard("📦 Склад", "store / PIN: 5555", "Товари, залишки, дефіцит", UserRole.Storekeeper, Color.FromArgb(236, 72, 153)));
+        flpDemoButtons.Controls.Add(CreateDemoCard("📦 Склад", "store / PIN: 5555", "Товари, залишки, дефіцит", UserRole.Storekeeper, ThemePalette.AccentSubtle));
 
         pnlDemoSection.Controls.AddRange(new Control[] { lblDemoTitle, flpDemoButtons });
 

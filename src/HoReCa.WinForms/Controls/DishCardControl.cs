@@ -59,20 +59,24 @@ public class DishCardControl : UserControl
 
         // Draw card background
         using var path = CreateRoundedRectangle(rect, 8);
-        using var bgBrush = new SolidBrush(_isHovered ? Color.FromArgb(38, 48, 72) : ThemePalette.BackgroundCard);
+        using var bgBrush = new SolidBrush(_isHovered ? ThemePalette.BackgroundCardHover : ThemePalette.BackgroundCard);
         g.FillPath(bgBrush, path);
 
         using var borderPen = new Pen(_isHovered ? ThemePalette.Primary : ThemePalette.Border, 1.5f);
         g.DrawPath(borderPen, path);
 
-        // Draw Category Tag
+        // Draw Category Tag (Auto-measured width)
         using var tagFont = new Font("Segoe UI", 7.5f, FontStyle.Bold);
-        using var tagBrush = new SolidBrush(ThemePalette.PrimaryDark);
-        using var tagTextBrush = new SolidBrush(Color.WhiteSmoke);
-        var tagRect = new Rectangle(10, 8, 85, 18);
+        using var tagBrush = new SolidBrush(ThemePalette.BackgroundInput);
+        using var tagTextBrush = new SolidBrush(ThemePalette.TextMuted);
+        var tagSize = g.MeasureString(_item.CategoryName, tagFont);
+        int tagWidth = Math.Min((int)tagSize.Width + 10, Width - 90);
+        var tagRect = new Rectangle(10, 8, tagWidth, 18);
         using var tagPath = CreateRoundedRectangle(tagRect, 4);
         g.FillPath(tagBrush, tagPath);
-        g.DrawString(_item.CategoryName, tagFont, tagTextBrush, 14, 10);
+        
+        using var sfTag = new StringFormat { Trimming = StringTrimming.EllipsisCharacter, FormatFlags = StringFormatFlags.NoWrap };
+        g.DrawString(_item.CategoryName, tagFont, tagTextBrush, new RectangleF(13, 9, tagWidth - 6, 16), sfTag);
 
         // Prep time
         using var timeFont = new Font("Segoe UI", 8f, FontStyle.Regular);
@@ -80,11 +84,12 @@ public class DishCardControl : UserControl
         string timeStr = $"⏱ {_item.PreparationMinutes} хв";
         g.DrawString(timeStr, timeFont, timeBrush, Width - 65, 10);
 
-        // Dish Name
+        // Dish Name (With Word Ellipsis)
         using var titleFont = new Font("Segoe UI", 9.5f, FontStyle.Bold);
         using var titleBrush = new SolidBrush(ThemePalette.TextPrimary);
         var titleRect = new RectangleF(10, 32, Width - 20, 48);
-        g.DrawString(_item.Name, titleFont, titleBrush, titleRect);
+        using var sfTitle = new StringFormat { Trimming = StringTrimming.EllipsisWord };
+        g.DrawString(_item.Name, titleFont, titleBrush, titleRect, sfTitle);
 
         // Price Badge
         string priceStr = $"{_item.Price:F0} ₴";
@@ -93,11 +98,13 @@ public class DishCardControl : UserControl
         g.DrawString(priceStr, priceFont, priceBrush, 10, Height - 28);
 
         // Plus Icon button
-        using var plusBrush = new SolidBrush(ThemePalette.Primary);
+        using var plusBrush = new SolidBrush(ThemePalette.BackgroundInput);
         g.FillEllipse(plusBrush, Width - 34, Height - 30, 24, 24);
+        using var plusPen = new Pen(ThemePalette.BorderLight);
+        g.DrawEllipse(plusPen, Width - 34, Height - 30, 24, 24);
         using var iconFont = new Font("Segoe UI", 11f, FontStyle.Bold);
-        using var iconBrush = new SolidBrush(ThemePalette.TextInverse);
-        g.DrawString("+", iconFont, iconBrush, Width - 28, Height - 31);
+        using var iconBrush = new SolidBrush(ThemePalette.TextPrimary);
+        g.DrawString("+", iconFont, iconBrush, Width - 28, Height - 32);
     }
 
     private static GraphicsPath CreateRoundedRectangle(Rectangle rect, int radius)

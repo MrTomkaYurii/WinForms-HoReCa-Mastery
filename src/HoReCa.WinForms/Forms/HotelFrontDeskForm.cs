@@ -21,9 +21,9 @@ public class HotelFrontDeskForm : BaseForm
         var pnlTopBar = new Panel
         {
             Dock = DockStyle.Top,
-            Height = 55,
+            Height = 56,
             BackColor = ThemePalette.BackgroundSidebar,
-            Padding = new Padding(12)
+            Padding = new Padding(16, 10, 16, 10)
         };
 
         var lblTitle = new Label
@@ -31,40 +31,52 @@ public class HotelFrontDeskForm : BaseForm
             Text = "ГОТЕЛЬНИЙ ФОНД & ШАХМАТКА БРОНЮВАНЬ",
             Font = ThemePalette.TitleFont,
             ForeColor = ThemePalette.Primary,
-            Location = new Point(14, 16),
+            Dock = DockStyle.Left,
+            TextAlign = ContentAlignment.MiddleLeft,
             AutoSize = true
         };
 
-        var btnNewBooking = new Button
+        var flpActions = new FlowLayoutPanel
         {
-            Text = "+ НОВЕ БРОНЮВАННЯ",
-            Location = new Point(Width - 360, 10),
-            Anchor = AnchorStyles.Top | AnchorStyles.Right,
-            Size = new Size(160, 36),
-            FlatStyle = FlatStyle.Flat,
-            BackColor = ThemePalette.Primary,
-            ForeColor = ThemePalette.TextInverse,
-            Font = ThemePalette.TitleFont,
-            Cursor = Cursors.Hand
+            Dock = DockStyle.Right,
+            FlowDirection = FlowDirection.RightToLeft,
+            AutoSize = true,
+            WrapContents = false,
+            BackColor = Color.Transparent
         };
-        btnNewBooking.FlatAppearance.BorderSize = 0;
-        btnNewBooking.Click += async (s, e) => await OpenNewBookingDialogAsync();
 
         var btnRefresh = new Button
         {
             Text = "🔄 Оновити",
-            Location = new Point(Width - 190, 10),
-            Anchor = AnchorStyles.Top | AnchorStyles.Right,
-            Size = new Size(95, 36),
+            Size = new Size(110, 36),
             FlatStyle = FlatStyle.Flat,
             BackColor = ThemePalette.BackgroundInput,
             ForeColor = ThemePalette.TextPrimary,
+            Margin = new Padding(8, 0, 0, 0),
             Cursor = Cursors.Hand
         };
         btnRefresh.FlatAppearance.BorderColor = ThemePalette.Border;
         btnRefresh.Click += async (s, e) => await LoadDataAsync();
 
-        pnlTopBar.Controls.AddRange(new Control[] { lblTitle, btnNewBooking, btnRefresh });
+        var btnNewBooking = new Button
+        {
+            Text = "+ НОВЕ БРОНЮВАННЯ",
+            Size = new Size(195, 36),
+            FlatStyle = FlatStyle.Flat,
+            BackColor = ThemePalette.Primary,
+            ForeColor = ThemePalette.TextInverse,
+            Font = ThemePalette.TitleFont,
+            Margin = new Padding(8, 0, 0, 0),
+            Cursor = Cursors.Hand
+        };
+        btnNewBooking.FlatAppearance.BorderSize = 0;
+        btnNewBooking.Click += async (s, e) => await OpenNewBookingDialogAsync();
+
+        flpActions.Controls.Add(btnRefresh);
+        flpActions.Controls.Add(btnNewBooking);
+
+        pnlTopBar.Controls.Add(flpActions);
+        pnlTopBar.Controls.Add(lblTitle);
 
         var split = new SplitContainer
         {

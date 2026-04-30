@@ -85,43 +85,48 @@ public class WelcomeStartForm : UserControl
         var pnlQuickDemo = new Panel
         {
             Dock = DockStyle.Top,
-            Height = 160,
+            Height = 150,
             BackColor = ThemePalette.BackgroundCard,
-            Padding = new Padding(15),
+            Padding = new Padding(15, 12, 15, 12),
             Margin = new Padding(0, 15, 0, 15)
         };
 
         var lblDemoHeader = new Label
         {
             Text = "⚡ ШВИДКИЙ ТЕСТОВИЙ ВХІД В 1 КЛІК (Миттєвий перехід до відповідного модуля):",
-            Font = new Font("Segoe UI", 10f, FontStyle.Bold),
-            ForeColor = ThemePalette.Warning,
-            Location = new Point(15, 12),
-            AutoSize = true
+            Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+            ForeColor = ThemePalette.Primary,
+            Dock = DockStyle.Top,
+            Height = 24
         };
 
-        var flpCards = new FlowLayoutPanel
+        var tlpCards = new TableLayoutPanel
         {
-            Location = new Point(15, 42),
-            Size = new Size(1000, 105),
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
-            AutoScroll = false
+            Dock = DockStyle.Fill,
+            ColumnCount = 5,
+            RowCount = 1,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0, 6, 0, 0)
         };
+        for (int i = 0; i < 5; i++)
+        {
+            tlpCards.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20f));
+        }
 
-        flpCards.Controls.Add(CreateDemoRoleCard("👑 Адміністратор", "admin / PIN: 1111", "BI Аналітика, повний аудит", UserRole.Administrator, ThemePalette.Primary));
-        flpCards.Controls.Add(CreateDemoRoleCard("🍽️ Офіціант", "waiter / PIN: 2222", "Столики, замовлення, POS", UserRole.Waiter, ThemePalette.Success));
-        flpCards.Controls.Add(CreateDemoRoleCard("🏨 Рецепція", "reception / PIN: 3333", "Шахматка, гості, бронь", UserRole.Receptionist, ThemePalette.Info));
-        flpCards.Controls.Add(CreateDemoRoleCard("👨‍🍳 Шеф-кухар", "chef / PIN: 4444", "KDS екран, таймери кухні", UserRole.Chef, ThemePalette.Warning));
-        flpCards.Controls.Add(CreateDemoRoleCard("📦 Склад", "store / PIN: 5555", "Товари, залишки, дефіцит", UserRole.Storekeeper, Color.FromArgb(236, 72, 153)));
+        tlpCards.Controls.Add(CreateDemoRoleCard("👑 Адміністратор", "admin / PIN: 1111", "BI Аналітика, повний аудит", UserRole.Administrator, ThemePalette.Primary), 0, 0);
+        tlpCards.Controls.Add(CreateDemoRoleCard("🍽️ Офіціант", "waiter / PIN: 2222", "Столики, замовлення, POS", UserRole.Waiter, ThemePalette.Success), 1, 0);
+        tlpCards.Controls.Add(CreateDemoRoleCard("🏨 Рецепція", "reception / PIN: 3333", "Шахматка, гості, бронь", UserRole.Receptionist, ThemePalette.Info), 2, 0);
+        tlpCards.Controls.Add(CreateDemoRoleCard("👨‍🍳 Шеф-кухар", "chef / PIN: 4444", "KDS екран, таймери кухні", UserRole.Chef, ThemePalette.Warning), 3, 0);
+        tlpCards.Controls.Add(CreateDemoRoleCard("📦 Склад", "store / PIN: 5555", "Товари, залишки, дефіцит", UserRole.Storekeeper, ThemePalette.TextMuted), 4, 0);
 
-        pnlQuickDemo.Controls.AddRange(new Control[] { lblDemoHeader, flpCards });
+        pnlQuickDemo.Controls.Add(tlpCards);
+        pnlQuickDemo.Controls.Add(lblDemoHeader);
 
-        // 3. Two-Column Layout for Login & Registration
+        // 3. Two-Column Layout for Login & Registration (Fully Responsive)
         var pnlForms = new TableLayoutPanel
         {
             Dock = DockStyle.Top,
-            Height = 400,
+            Height = 440,
             ColumnCount = 2,
             RowCount = 1,
             Margin = new Padding(0, 15, 0, 0)
@@ -134,17 +139,17 @@ public class WelcomeStartForm : UserControl
         {
             Dock = DockStyle.Fill,
             BackColor = ThemePalette.BackgroundCard,
-            Padding = new Padding(25),
+            Padding = new Padding(24),
             Margin = new Padding(0, 0, 10, 0)
         };
 
         var lblLoginTitle = new Label
         {
             Text = "Вхід до системи",
-            Font = new Font("Segoe UI", 12.5f, FontStyle.Bold),
+            Font = new Font("Segoe UI", 12f, FontStyle.Bold),
             ForeColor = ThemePalette.TextPrimary,
-            Location = new Point(25, 20),
-            AutoSize = true
+            Dock = DockStyle.Top,
+            Height = 28
         };
 
         var lblLoginHint = new Label
@@ -152,26 +157,26 @@ public class WelcomeStartForm : UserControl
             Text = "Введіть логін або 4-значний PIN-код:",
             Font = ThemePalette.SmallFont,
             ForeColor = ThemePalette.TextMuted,
-            Location = new Point(26, 48),
-            AutoSize = true
+            Dock = DockStyle.Top,
+            Height = 24
         };
 
-        var lblUser = new Label { Text = "Логін або PIN:", Location = new Point(25, 80), ForeColor = ThemePalette.TextMuted, Font = ThemePalette.SmallFont, AutoSize = true };
+        var lblUser = new Label { Text = "Логін або PIN:", ForeColor = ThemePalette.TextMuted, Font = ThemePalette.SmallFont, Dock = DockStyle.Top, Height = 22, Margin = new Padding(0, 10, 0, 0) };
         _txtLoginUser = new TextBox
         {
-            Location = new Point(25, 102),
-            Size = new Size(380, 32),
+            Dock = DockStyle.Top,
+            Height = 32,
             BackColor = ThemePalette.BackgroundInput,
             ForeColor = ThemePalette.TextPrimary,
             BorderStyle = BorderStyle.FixedSingle,
             Font = new Font("Segoe UI", 11f)
         };
 
-        var lblPass = new Label { Text = "Пароль (якщо входите за логіном):", Location = new Point(25, 145), ForeColor = ThemePalette.TextMuted, Font = ThemePalette.SmallFont, AutoSize = true };
+        var lblPass = new Label { Text = "Пароль (якщо входите за логіном):", ForeColor = ThemePalette.TextMuted, Font = ThemePalette.SmallFont, Dock = DockStyle.Top, Height = 26, Margin = new Padding(0, 12, 0, 0) };
         _txtLoginPass = new TextBox
         {
-            Location = new Point(25, 167),
-            Size = new Size(380, 32),
+            Dock = DockStyle.Top,
+            Height = 32,
             BackColor = ThemePalette.BackgroundInput,
             ForeColor = ThemePalette.TextPrimary,
             BorderStyle = BorderStyle.FixedSingle,
@@ -182,43 +187,55 @@ public class WelcomeStartForm : UserControl
         _btnLogin = new Button
         {
             Text = "УВІЙТИ В СИСТЕМУ",
-            Location = new Point(25, 225),
-            Size = new Size(380, 44),
-            BackColor = ThemePalette.Primary,
-            ForeColor = ThemePalette.TextInverse,
+            Dock = DockStyle.Top,
+            Height = 44,
+            BackColor = ThemePalette.PrimaryDark,
+            ForeColor = ThemePalette.TextPrimary,
             Font = new Font("Segoe UI", 10.5f, FontStyle.Bold),
             FlatStyle = FlatStyle.Flat,
-            Cursor = Cursors.Hand
+            Cursor = Cursors.Hand,
+            Margin = new Padding(0, 20, 0, 0)
         };
-        _btnLogin.FlatAppearance.BorderSize = 0;
+        _btnLogin.FlatAppearance.BorderColor = ThemePalette.BorderLight;
         _btnLogin.Click += async (s, e) => await ExecuteLoginAsync();
 
         _lblLoginStatus = new Label
         {
-            Location = new Point(25, 285),
-            Size = new Size(380, 45),
+            Dock = DockStyle.Top,
+            Height = 45,
             ForeColor = ThemePalette.Danger,
-            Font = ThemePalette.SmallFont
+            Font = ThemePalette.SmallFont,
+            Margin = new Padding(0, 8, 0, 0)
         };
 
-        pnlLoginCard.Controls.AddRange(new Control[] { lblLoginTitle, lblLoginHint, lblUser, _txtLoginUser, lblPass, _txtLoginPass, _btnLogin, _lblLoginStatus });
+        var pnlLoginInner = new Panel { Dock = DockStyle.Fill };
+        pnlLoginInner.Controls.Add(_lblLoginStatus);
+        pnlLoginInner.Controls.Add(_btnLogin);
+        pnlLoginInner.Controls.Add(_txtLoginPass);
+        pnlLoginInner.Controls.Add(lblPass);
+        pnlLoginInner.Controls.Add(_txtLoginUser);
+        pnlLoginInner.Controls.Add(lblUser);
 
-        // RIGHT: Registration Card
+        pnlLoginCard.Controls.Add(pnlLoginInner);
+        pnlLoginCard.Controls.Add(lblLoginHint);
+        pnlLoginCard.Controls.Add(lblLoginTitle);
+
+        // RIGHT: Registration Card (Adaptive Grid)
         var pnlRegCard = new Panel
         {
             Dock = DockStyle.Fill,
             BackColor = ThemePalette.BackgroundCard,
-            Padding = new Padding(25),
+            Padding = new Padding(24),
             Margin = new Padding(10, 0, 0, 0)
         };
 
         var lblRegTitle = new Label
         {
             Text = "Реєстрація нового працівника",
-            Font = new Font("Segoe UI", 12.5f, FontStyle.Bold),
+            Font = new Font("Segoe UI", 12f, FontStyle.Bold),
             ForeColor = ThemePalette.TextPrimary,
-            Location = new Point(25, 20),
-            AutoSize = true
+            Dock = DockStyle.Top,
+            Height = 28
         };
 
         var lblRegHint = new Label
@@ -226,27 +243,64 @@ public class WelcomeStartForm : UserControl
             Text = "Створіть власний обліковий запис працівника комплексу:",
             Font = ThemePalette.SmallFont,
             ForeColor = ThemePalette.TextMuted,
-            Location = new Point(26, 48),
-            AutoSize = true
+            Dock = DockStyle.Top,
+            Height = 24
         };
 
-        var lblRegFio = new Label { Text = "ПІБ:", Location = new Point(25, 80), ForeColor = ThemePalette.TextMuted, Font = ThemePalette.SmallFont, AutoSize = true };
-        _txtRegFullName = new TextBox { Location = new Point(25, 102), Size = new Size(200, 30), BackColor = ThemePalette.BackgroundInput, ForeColor = ThemePalette.TextPrimary, BorderStyle = BorderStyle.FixedSingle, Font = ThemePalette.BodyFont };
+        var tlpRegGrid = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 5,
+            BackColor = Color.Transparent
+        };
+        tlpRegGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+        tlpRegGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+        tlpRegGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 56f)); // FIO & Username
+        tlpRegGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 56f)); // Password & PIN
+        tlpRegGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 56f)); // Role
+        tlpRegGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 50f)); // Button
+        tlpRegGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 100f)); // Status
 
-        var lblRegLogin = new Label { Text = "Логін (Username):", Location = new Point(240, 80), ForeColor = ThemePalette.TextMuted, Font = ThemePalette.SmallFont, AutoSize = true };
-        _txtRegUser = new TextBox { Location = new Point(240, 102), Size = new Size(190, 30), BackColor = ThemePalette.BackgroundInput, ForeColor = ThemePalette.TextPrimary, BorderStyle = BorderStyle.FixedSingle, Font = ThemePalette.BodyFont };
+        // Cell 0,0: FIO
+        var pnlFio = new Panel { Dock = DockStyle.Fill, Padding = new Padding(0, 0, 8, 0) };
+        var lblRegFio = new Label { Text = "ПІБ:", ForeColor = ThemePalette.TextMuted, Font = ThemePalette.SmallFont, Dock = DockStyle.Top, Height = 18 };
+        _txtRegFullName = new TextBox { Dock = DockStyle.Top, Height = 30, BackColor = ThemePalette.BackgroundInput, ForeColor = ThemePalette.TextPrimary, BorderStyle = BorderStyle.FixedSingle, Font = ThemePalette.BodyFont };
+        pnlFio.Controls.Add(_txtRegFullName);
+        pnlFio.Controls.Add(lblRegFio);
+        tlpRegGrid.Controls.Add(pnlFio, 0, 0);
 
-        var lblRegPassword = new Label { Text = "Пароль:", Location = new Point(25, 145), ForeColor = ThemePalette.TextMuted, Font = ThemePalette.SmallFont, AutoSize = true };
-        _txtRegPass = new TextBox { Location = new Point(25, 167), Size = new Size(200, 30), BackColor = ThemePalette.BackgroundInput, ForeColor = ThemePalette.TextPrimary, BorderStyle = BorderStyle.FixedSingle, PasswordChar = '●', Font = ThemePalette.BodyFont };
+        // Cell 1,0: Username
+        var pnlUser = new Panel { Dock = DockStyle.Fill, Padding = new Padding(8, 0, 0, 0) };
+        var lblRegLogin = new Label { Text = "Логін (Username):", ForeColor = ThemePalette.TextMuted, Font = ThemePalette.SmallFont, Dock = DockStyle.Top, Height = 18 };
+        _txtRegUser = new TextBox { Dock = DockStyle.Top, Height = 30, BackColor = ThemePalette.BackgroundInput, ForeColor = ThemePalette.TextPrimary, BorderStyle = BorderStyle.FixedSingle, Font = ThemePalette.BodyFont };
+        pnlUser.Controls.Add(_txtRegUser);
+        pnlUser.Controls.Add(lblRegLogin);
+        tlpRegGrid.Controls.Add(pnlUser, 1, 0);
 
-        var lblRegPin = new Label { Text = "PIN (4 цифри):", Location = new Point(240, 145), ForeColor = ThemePalette.TextMuted, Font = ThemePalette.SmallFont, AutoSize = true };
-        _txtRegPin = new TextBox { Location = new Point(240, 167), Size = new Size(190, 30), BackColor = ThemePalette.BackgroundInput, ForeColor = ThemePalette.TextPrimary, BorderStyle = BorderStyle.FixedSingle, MaxLength = 4, Font = ThemePalette.BodyFont };
+        // Cell 0,1: Password
+        var pnlPass = new Panel { Dock = DockStyle.Fill, Padding = new Padding(0, 0, 8, 0) };
+        var lblRegPassword = new Label { Text = "Пароль:", ForeColor = ThemePalette.TextMuted, Font = ThemePalette.SmallFont, Dock = DockStyle.Top, Height = 18 };
+        _txtRegPass = new TextBox { Dock = DockStyle.Top, Height = 30, BackColor = ThemePalette.BackgroundInput, ForeColor = ThemePalette.TextPrimary, BorderStyle = BorderStyle.FixedSingle, PasswordChar = '●', Font = ThemePalette.BodyFont };
+        pnlPass.Controls.Add(_txtRegPass);
+        pnlPass.Controls.Add(lblRegPassword);
+        tlpRegGrid.Controls.Add(pnlPass, 0, 1);
 
-        var lblRole = new Label { Text = "Посада / Роль:", Location = new Point(25, 205), ForeColor = ThemePalette.TextMuted, Font = ThemePalette.SmallFont, AutoSize = true };
+        // Cell 1,1: PIN
+        var pnlPin = new Panel { Dock = DockStyle.Fill, Padding = new Padding(8, 0, 0, 0) };
+        var lblRegPin = new Label { Text = "PIN (4 цифри):", ForeColor = ThemePalette.TextMuted, Font = ThemePalette.SmallFont, Dock = DockStyle.Top, Height = 18 };
+        _txtRegPin = new TextBox { Dock = DockStyle.Top, Height = 30, BackColor = ThemePalette.BackgroundInput, ForeColor = ThemePalette.TextPrimary, BorderStyle = BorderStyle.FixedSingle, MaxLength = 4, Font = ThemePalette.BodyFont };
+        pnlPin.Controls.Add(_txtRegPin);
+        pnlPin.Controls.Add(lblRegPin);
+        tlpRegGrid.Controls.Add(pnlPin, 1, 1);
+
+        // Cell 0,2: Role (Span 2)
+        var pnlRole = new Panel { Dock = DockStyle.Fill };
+        var lblRole = new Label { Text = "Посада / Роль:", ForeColor = ThemePalette.TextMuted, Font = ThemePalette.SmallFont, Dock = DockStyle.Top, Height = 18 };
         _cbRegRole = new ComboBox
         {
-            Location = new Point(25, 227),
-            Size = new Size(405, 30),
+            Dock = DockStyle.Top,
+            Height = 30,
             BackColor = ThemePalette.BackgroundInput,
             ForeColor = ThemePalette.TextPrimary,
             DropDownStyle = ComboBoxStyle.DropDownList,
@@ -261,39 +315,41 @@ public class WelcomeStartForm : UserControl
             "Менеджер складу (Storekeeper)"
         });
         _cbRegRole.SelectedIndex = 1;
+        pnlRole.Controls.Add(_cbRegRole);
+        pnlRole.Controls.Add(lblRole);
+        tlpRegGrid.Controls.Add(pnlRole, 0, 2);
+        tlpRegGrid.SetColumnSpan(pnlRole, 2);
 
+        // Cell 0,3: Register Button (Span 2)
         _btnRegister = new Button
         {
             Text = "ЗАРЕЄСТРУВАТИ ТА УВІЙТИ",
-            Location = new Point(25, 275),
-            Size = new Size(405, 44),
+            Dock = DockStyle.Fill,
+            Height = 44,
             BackColor = ThemePalette.Success,
-            ForeColor = ThemePalette.TextInverse,
-            Font = new Font("Segoe UI", 10.5f, FontStyle.Bold),
+            ForeColor = ThemePalette.TextPrimary,
+            Font = new Font("Segoe UI", 10f, FontStyle.Bold),
             FlatStyle = FlatStyle.Flat,
             Cursor = Cursors.Hand
         };
         _btnRegister.FlatAppearance.BorderSize = 0;
         _btnRegister.Click += async (s, e) => await ExecuteRegisterAsync();
+        tlpRegGrid.Controls.Add(_btnRegister, 0, 3);
+        tlpRegGrid.SetColumnSpan(_btnRegister, 2);
 
+        // Cell 0,4: Status (Span 2)
         _lblRegStatus = new Label
         {
-            Location = new Point(25, 330),
-            Size = new Size(405, 45),
+            Dock = DockStyle.Fill,
             ForeColor = ThemePalette.Danger,
             Font = ThemePalette.SmallFont
         };
+        tlpRegGrid.Controls.Add(_lblRegStatus, 0, 4);
+        tlpRegGrid.SetColumnSpan(_lblRegStatus, 2);
 
-        pnlRegCard.Controls.AddRange(new Control[]
-        {
-            lblRegTitle, lblRegHint,
-            lblRegFio, _txtRegFullName,
-            lblRegLogin, _txtRegUser,
-            lblRegPassword, _txtRegPass,
-            lblRegPin, _txtRegPin,
-            lblRole, _cbRegRole,
-            _btnRegister, _lblRegStatus
-        });
+        pnlRegCard.Controls.Add(tlpRegGrid);
+        pnlRegCard.Controls.Add(lblRegHint);
+        pnlRegCard.Controls.Add(lblRegTitle);
 
         pnlForms.Controls.Add(pnlLoginCard, 0, 0);
         pnlForms.Controls.Add(pnlRegCard, 1, 0);
@@ -308,45 +364,59 @@ public class WelcomeStartForm : UserControl
 
     private Control CreateDemoRoleCard(string title, string creds, string desc, UserRole role, Color accentColor)
     {
-        var btn = new Button
+        var pnl = new Panel
         {
-            Size = new Size(185, 90),
+            Dock = DockStyle.Fill,
             BackColor = ThemePalette.BackgroundDark,
-            FlatStyle = FlatStyle.Flat,
-            Margin = new Padding(0, 0, 10, 0),
+            Margin = new Padding(4),
+            Padding = new Padding(10, 8, 10, 8),
             Cursor = Cursors.Hand
         };
-        btn.FlatAppearance.BorderColor = ThemePalette.Border;
-        btn.FlatAppearance.MouseOverBackColor = ThemePalette.BackgroundInput;
 
         var lblCardTitle = new Label
         {
             Text = title,
             Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
-            ForeColor = accentColor,
-            Location = new Point(8, 8),
-            AutoSize = true
+            ForeColor = ThemePalette.TextPrimary,
+            Dock = DockStyle.Top,
+            Height = 22,
+            AutoEllipsis = true
         };
 
         var lblCreds = new Label
         {
             Text = creds,
             Font = ThemePalette.SmallFont,
-            ForeColor = ThemePalette.TextPrimary,
-            Location = new Point(8, 32),
-            AutoSize = true
+            ForeColor = accentColor,
+            Dock = DockStyle.Top,
+            Height = 20,
+            AutoEllipsis = true
         };
 
         var lblDesc = new Label
         {
             Text = desc,
-            Font = new Font("Segoe UI", 7.8f),
+            Font = new Font("Segoe UI", 8f),
             ForeColor = ThemePalette.TextMuted,
-            Location = new Point(8, 56),
-            AutoSize = true
+            Dock = DockStyle.Fill,
+            AutoEllipsis = true
         };
 
-        btn.Controls.AddRange(new Control[] { lblCardTitle, lblCreds, lblDesc });
+        pnl.Controls.Add(lblDesc);
+        pnl.Controls.Add(lblCreds);
+        pnl.Controls.Add(lblCardTitle);
+
+        pnl.Paint += (s, e) =>
+        {
+            using var pen = new Pen(ThemePalette.BorderLight, 1f);
+            e.Graphics.DrawRectangle(pen, 0, 0, pnl.Width - 1, pnl.Height - 1);
+        };
+
+        pnl.MouseEnter += (s, e) => pnl.BackColor = ThemePalette.BackgroundCardHover;
+        pnl.MouseLeave += (s, e) => pnl.BackColor = ThemePalette.BackgroundDark;
+        lblCardTitle.MouseEnter += (s, e) => pnl.BackColor = ThemePalette.BackgroundCardHover;
+        lblCreds.MouseEnter += (s, e) => pnl.BackColor = ThemePalette.BackgroundCardHover;
+        lblDesc.MouseEnter += (s, e) => pnl.BackColor = ThemePalette.BackgroundCardHover;
 
         Action clickAction = async () =>
         {
@@ -364,12 +434,12 @@ public class WelcomeStartForm : UserControl
             }
         };
 
-        btn.Click += (s, e) => clickAction();
+        pnl.Click += (s, e) => clickAction();
         lblCardTitle.Click += (s, e) => clickAction();
         lblCreds.Click += (s, e) => clickAction();
         lblDesc.Click += (s, e) => clickAction();
 
-        return btn;
+        return pnl;
     }
 
     private async Task ExecuteLoginAsync()

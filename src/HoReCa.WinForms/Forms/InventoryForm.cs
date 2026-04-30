@@ -20,26 +20,49 @@ public class InventoryForm : BaseForm
         var pnlHeader = new Panel
         {
             Dock = DockStyle.Top,
-            Height = 60,
-            BackColor = ThemePalette.BackgroundSidebar,
-            Padding = new Padding(12)
+            Height = 56,
+            BackColor = ThemePalette.BackgroundHeader,
+            Padding = new Padding(16, 0, 16, 0)
         };
 
         var lblTitle = new Label
         {
-            Text = "СКЛАДСЬКИЙ ОБЛІК & ТЕХКАРТИ ІНГРЕДІЄНТІВ",
+            Text = "СКЛАДСЬКИЙ ОБЛІК ІНГРЕДІЄНТІВ",
             Font = ThemePalette.TitleFont,
-            ForeColor = ThemePalette.Primary,
-            Location = new Point(14, 18),
-            AutoSize = true
+            ForeColor = ThemePalette.TextPrimary,
+            Dock = DockStyle.Left,
+            AutoSize = true,
+            TextAlign = ContentAlignment.MiddleLeft
         };
+
+        var pnlHeaderRight = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Right,
+            AutoSize = true,
+            FlowDirection = FlowDirection.RightToLeft,
+            WrapContents = false,
+            BackColor = Color.Transparent,
+            Padding = new Padding(0, 12, 0, 0)
+        };
+
+        var btnAddStock = new Button
+        {
+            Text = "+ Поповнити залишок",
+            Size = new Size(160, 32),
+            FlatStyle = FlatStyle.Flat,
+            BackColor = ThemePalette.BackgroundCard,
+            ForeColor = ThemePalette.TextPrimary,
+            Font = ThemePalette.SmallFont,
+            Cursor = Cursors.Hand,
+            Margin = new Padding(8, 0, 0, 0)
+        };
+        btnAddStock.FlatAppearance.BorderColor = ThemePalette.BorderLight;
+        btnAddStock.Click += async (s, e) => await OpenAdjustStockDialogAsync();
 
         _txtSearch = new TextBox
         {
             Width = 240,
             Height = 30,
-            Location = new Point(Width - 520, 15),
-            Anchor = AnchorStyles.Top | AnchorStyles.Right,
             BackColor = ThemePalette.BackgroundInput,
             ForeColor = ThemePalette.TextPrimary,
             BorderStyle = BorderStyle.FixedSingle,
@@ -48,22 +71,11 @@ public class InventoryForm : BaseForm
         };
         _txtSearch.TextChanged += async (s, e) => await LoadInventoryAsync();
 
-        var btnAddStock = new Button
-        {
-            Text = "+ Поповнити залишок",
-            Location = new Point(Width - 260, 13),
-            Anchor = AnchorStyles.Top | AnchorStyles.Right,
-            Size = new Size(160, 34),
-            FlatStyle = FlatStyle.Flat,
-            BackColor = ThemePalette.Success,
-            ForeColor = ThemePalette.TextInverse,
-            Font = ThemePalette.TitleFont,
-            Cursor = Cursors.Hand
-        };
-        btnAddStock.FlatAppearance.BorderSize = 0;
-        btnAddStock.Click += async (s, e) => await OpenAdjustStockDialogAsync();
+        pnlHeaderRight.Controls.Add(btnAddStock);
+        pnlHeaderRight.Controls.Add(_txtSearch);
 
-        pnlHeader.Controls.AddRange(new Control[] { lblTitle, _txtSearch, btnAddStock });
+        pnlHeader.Controls.Add(pnlHeaderRight);
+        pnlHeader.Controls.Add(lblTitle);
 
         _grid = new DataGridView
         {
@@ -75,7 +87,8 @@ public class InventoryForm : BaseForm
             SelectionMode = DataGridViewSelectionMode.FullRowSelect,
             AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
             EnableHeadersVisualStyles = false,
-            GridColor = ThemePalette.Border
+            GridColor = ThemePalette.Border,
+            RowTemplate = { Height = 34 }
         };
 
         _grid.ColumnHeadersDefaultCellStyle.BackColor = ThemePalette.BackgroundSidebar;
@@ -83,8 +96,8 @@ public class InventoryForm : BaseForm
         _grid.ColumnHeadersDefaultCellStyle.Font = ThemePalette.TitleFont;
         _grid.DefaultCellStyle.BackColor = ThemePalette.BackgroundCard;
         _grid.DefaultCellStyle.ForeColor = ThemePalette.TextPrimary;
-        _grid.DefaultCellStyle.SelectionBackColor = ThemePalette.BackgroundInput;
-        _grid.DefaultCellStyle.SelectionForeColor = ThemePalette.Primary;
+        _grid.DefaultCellStyle.SelectionBackColor = ThemePalette.BackgroundCardHover;
+        _grid.DefaultCellStyle.SelectionForeColor = ThemePalette.TextPrimary;
 
         _grid.Columns.Add("SKU", "Артикул (SKU)");
         _grid.Columns.Add("Name", "Назва інгредієнта");
@@ -94,7 +107,15 @@ public class InventoryForm : BaseForm
         _grid.Columns.Add("Cost", "Собівартість");
         _grid.Columns.Add("Status", "Статус складу");
 
-        // Cell painting for low stock highlights
+        _grid.Columns[0].FillWeight = 13; _grid.Columns[0].MinimumWidth = 85;
+        _grid.Columns[1].FillWeight = 32; _grid.Columns[1].MinimumWidth = 160;
+        _grid.Columns[2].FillWeight = 8;  _grid.Columns[2].MinimumWidth = 55;
+        _grid.Columns[3].FillWeight = 11; _grid.Columns[3].MinimumWidth = 80;
+        _grid.Columns[4].FillWeight = 11; _grid.Columns[4].MinimumWidth = 80;
+        _grid.Columns[5].FillWeight = 10; _grid.Columns[5].MinimumWidth = 75;
+        _grid.Columns[6].FillWeight = 15; _grid.Columns[6].MinimumWidth = 135;
+
+        // Cell painting for low stock highlights (Never overflows boundaries)
         _grid.CellPainting += (s, e) =>
         {
             if (e.RowIndex >= 0 && e.ColumnIndex == 6)
@@ -103,16 +124,18 @@ public class InventoryForm : BaseForm
                 var val = e.Value?.ToString() ?? "";
                 bool isLow = val.Contains("КРИТИЧНИЙ");
 
-                Color badgeBg = isLow ? Color.FromArgb(70, ThemePalette.Danger) : Color.FromArgb(70, ThemePalette.Success);
+                Color badgeBg = isLow ? Color.FromArgb(45, ThemePalette.Danger) : Color.FromArgb(35, ThemePalette.Success);
+                Color badgeBorder = isLow ? ThemePalette.Danger : ThemePalette.Success;
                 Color badgeText = isLow ? ThemePalette.Danger : ThemePalette.Success;
 
-                var rect = new Rectangle(e.CellBounds.X + 8, e.CellBounds.Y + 4, e.CellBounds.Width - 16, e.CellBounds.Height - 8);
+                var rect = new Rectangle(e.CellBounds.X + 6, e.CellBounds.Y + 4, e.CellBounds.Width - 12, e.CellBounds.Height - 8);
                 using var bBrush = new SolidBrush(badgeBg);
-                using var tBrush = new SolidBrush(badgeText);
-                using var bFont = new Font("Segoe UI", 8.5f, FontStyle.Bold);
+                using var pPen = new Pen(badgeBorder, 1f);
+                using var bFont = new Font("Segoe UI", 8f, FontStyle.Bold);
 
                 e.Graphics.FillRectangle(bBrush, rect);
-                e.Graphics.DrawString(val, bFont, tBrush, rect.X + 6, rect.Y + 3);
+                e.Graphics.DrawRectangle(pPen, rect);
+                TextRenderer.DrawText(e.Graphics, val, bFont, rect, badgeText, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
                 e.Handled = true;
             }
         };

@@ -4,32 +4,37 @@ namespace HoReCa.WinForms.Common;
 
 public static class ThemePalette
 {
-    // Backgrounds
-    public static readonly Color BackgroundDark = Color.FromArgb(18, 24, 38);       // Deep slate navy
-    public static readonly Color BackgroundCard = Color.FromArgb(28, 36, 54);       // Card surface
-    public static readonly Color BackgroundInput = Color.FromArgb(36, 46, 68);      // Input fields
-    public static readonly Color BackgroundSidebar = Color.FromArgb(14, 19, 31);    // Left sidebar
+    // Backgrounds — Neutral Charcoal / Deep Slate (Eye-friendly, no harsh contrast)
+    public static readonly Color BackgroundDark = Color.FromArgb(18, 18, 22);          // Deep graphite canvas
+    public static readonly Color BackgroundCard = Color.FromArgb(28, 28, 34);          // Neutral card container
+    public static readonly Color BackgroundCardHover = Color.FromArgb(38, 38, 46);     // Interactive hover state
+    public static readonly Color BackgroundInput = Color.FromArgb(24, 24, 30);         // Inset input field
+    public static readonly Color BackgroundSidebar = Color.FromArgb(13, 13, 16);       // Left navigation panel
+    public static readonly Color BackgroundHeader = Color.FromArgb(22, 22, 26);        // Top header bar
 
-    // Accent colors
-    public static readonly Color Primary = Color.FromArgb(56, 189, 248);            // Sky cyan
-    public static readonly Color PrimaryDark = Color.FromArgb(14, 116, 144);        // Cyan active
-    public static readonly Color Success = Color.FromArgb(52, 211, 153);            // Emerald
-    public static readonly Color Warning = Color.FromArgb(251, 191, 36);            // Amber
-    public static readonly Color Danger = Color.FromArgb(248, 113, 113);            // Ruby
-    public static readonly Color Info = Color.FromArgb(129, 140, 248);              // Indigo
+    // Accents — Understated Steel / Platinum (Minimalist, professional)
+    public static readonly Color Primary = Color.FromArgb(150, 175, 205);              // Muted steel slate
+    public static readonly Color PrimaryDark = Color.FromArgb(55, 68, 88);              // Deep steel tone
+    public static readonly Color AccentSubtle = Color.FromArgb(70, 80, 96);             // Secondary active tone
 
-    // Text colors
-    public static readonly Color TextPrimary = Color.FromArgb(241, 245, 249);      // Slate 100
-    public static readonly Color TextMuted = Color.FromArgb(148, 163, 184);        // Slate 400
-    public static readonly Color TextInverse = Color.FromArgb(15, 23, 42);          // Dark text
+    // Status Colors — Strictly semantic (Used only when status indication is required)
+    public static readonly Color Success = Color.FromArgb(68, 155, 110);               // Soft sage (Free table, normal stock)
+    public static readonly Color Warning = Color.FromArgb(205, 150, 55);               // Warm ochre (Reserved, warning stock)
+    public static readonly Color Danger = Color.FromArgb(205, 75, 75);                 // Brick red (Occupied, critical deficit)
+    public static readonly Color Info = Color.FromArgb(100, 135, 180);                 // Slate blue (Info, booking)
 
-    // Borders
-    public static readonly Color Border = Color.FromArgb(51, 65, 85);               // Slate 700
-    public static readonly Color BorderLight = Color.FromArgb(71, 85, 105);         // Slate 600
+    // Text hierarchy
+    public static readonly Color TextPrimary = Color.FromArgb(232, 235, 240);          // Crisp soft white
+    public static readonly Color TextMuted = Color.FromArgb(140, 145, 158);            // Neutral medium grey
+    public static readonly Color TextInverse = Color.FromArgb(18, 18, 22);             // Dark text for bright badges
 
-    // Fonts
+    // Borders & Dividers
+    public static readonly Color Border = Color.FromArgb(42, 42, 50);                  // Subtle container border
+    public static readonly Color BorderLight = Color.FromArgb(60, 60, 72);             // Highlighted separator
+
+    // Typography
     public static readonly Font HeaderFont = new("Segoe UI", 14f, FontStyle.Bold);
-    public static readonly Font TitleFont = new("Segoe UI", 11f, FontStyle.Bold);
+    public static readonly Font TitleFont = new("Segoe UI", 10.5f, FontStyle.Bold);
     public static readonly Font BodyFont = new("Segoe UI", 9.5f, FontStyle.Regular);
     public static readonly Font SmallFont = new("Segoe UI", 8.5f, FontStyle.Regular);
     public static readonly Font MonospaceFont = new("Cascadia Code", 9.5f, FontStyle.Regular);

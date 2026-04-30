@@ -18,10 +18,12 @@ public class PosTerminalForm : BaseForm
     private readonly DataGridView _gridCurrentOrder;
     private readonly Label _lblSelectedTable;
     private readonly Label _lblOrderTotal;
+    private readonly FlowLayoutPanel _pnlZoneTabs;
     private readonly List<CreateOrderItemRequest> _currentDraftItems = new();
     
     private TableDto? _selectedTable;
     private OrderDto? _activeOrder;
+    private int? _currentZoneId;
 
     public PosTerminalForm(ITablePosService posService, IReceiptPrintService printService)
     {
@@ -32,9 +34,25 @@ public class PosTerminalForm : BaseForm
         {
             Dock = DockStyle.Fill,
             Orientation = Orientation.Vertical,
-            SplitterDistance = 800,
+            SplitterDistance = 620,
             SplitterWidth = 4,
             BackColor = ThemePalette.Border
+        };
+
+        Resize += (s, e) =>
+        {
+            if (ClientSize.Width > 800)
+            {
+                try
+                {
+                    int targetDist = Math.Max(350, ClientSize.Width - 360);
+                    if (targetDist > 100 && targetDist < splitMain.Width - 100)
+                    {
+                        splitMain.SplitterDistance = targetDist;
+                    }
+                }
+                catch { }
+            }
         };
 
         // LEFT: Floor Plan + Menu Items
@@ -42,7 +60,7 @@ public class PosTerminalForm : BaseForm
         {
             Dock = DockStyle.Fill,
             Orientation = Orientation.Horizontal,
-            SplitterDistance = 380,
+            SplitterDistance = 330,
             SplitterWidth = 4,
             BackColor = ThemePalette.Border
         };
@@ -65,17 +83,30 @@ public class PosTerminalForm : BaseForm
 
         var lblFloorTitle = new Label
         {
-            Text = "ПЛАН ЗАЛУ (СХЕМА СТОЛИКІВ) — Перетягуйте столики для зміни плану",
+            Text = "СХЕМА ЗАЛУ",
             Font = ThemePalette.TitleFont,
-            ForeColor = ThemePalette.Primary,
-            Location = new Point(12, 12),
+            ForeColor = ThemePalette.TextPrimary,
+            Dock = DockStyle.Left,
+            TextAlign = ContentAlignment.MiddleLeft,
             AutoSize = true
         };
+
+        _pnlZoneTabs = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Right,
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            BackColor = Color.Transparent
+        };
+
+        pnlFloorToolbar.Controls.Add(_pnlZoneTabs);
         pnlFloorToolbar.Controls.Add(lblFloorTitle);
 
         var pnlFloorWrapper = new Panel { Dock = DockStyle.Fill };
         pnlFloorWrapper.Controls.Add(_pnlFloorCanvas);
         pnlFloorWrapper.Controls.Add(pnlFloorToolbar);
+        pnlFloorToolbar.BringToFront();
         splitLeft.Panel1.Controls.Add(pnlFloorWrapper);
 
         // Menu items selection panel
@@ -116,9 +147,9 @@ public class PosTerminalForm : BaseForm
         var pnlOrderHeader = new Panel
         {
             Dock = DockStyle.Top,
-            Height = 65,
+            Height = 62,
             BackColor = ThemePalette.BackgroundInput,
-            Padding = new Padding(10)
+            Padding = new Padding(12, 8, 12, 8)
         };
 
         _lblSelectedTable = new Label
@@ -126,8 +157,9 @@ public class PosTerminalForm : BaseForm
             Text = "СТОЛИК: НЕ ОБРАНО",
             Font = new Font("Segoe UI", 12f, FontStyle.Bold),
             ForeColor = ThemePalette.Primary,
-            Location = new Point(10, 10),
-            AutoSize = true
+            Dock = DockStyle.Top,
+            Height = 24,
+            AutoEllipsis = true
         };
 
         var lblWaiter = new Label
@@ -135,10 +167,11 @@ public class PosTerminalForm : BaseForm
             Text = "Офіціант: Юрій Т.  |  Зміна: Відкрита",
             Font = ThemePalette.SmallFont,
             ForeColor = ThemePalette.TextMuted,
-            Location = new Point(10, 36),
-            AutoSize = true
+            Dock = DockStyle.Top,
+            Height = 18,
+            AutoEllipsis = true
         };
-        pnlOrderHeader.Controls.AddRange(new Control[] { _lblSelectedTable, lblWaiter });
+        pnlOrderHeader.Controls.AddRange(new Control[] { lblWaiter, _lblSelectedTable });
 
         // Order Grid
         _gridCurrentOrder = new DataGridView
@@ -172,79 +205,112 @@ public class PosTerminalForm : BaseForm
         _gridCurrentOrder.Columns[2].FillWeight = 17;
         _gridCurrentOrder.Columns[3].FillWeight = 18;
 
-        // Bottom payment & action panel
+        // Bottom payment & action panel (Fully Responsive via TableLayoutPanels)
         var pnlOrderBottom = new Panel
         {
             Dock = DockStyle.Bottom,
-            Height = 160,
+            Height = 168,
             BackColor = ThemePalette.BackgroundSidebar,
-            Padding = new Padding(10)
+            Padding = new Padding(10, 6, 10, 8)
         };
 
         _lblOrderTotal = new Label
         {
             Text = "РАЗОМ: 0.00 ₴",
-            Font = new Font("Segoe UI", 16f, FontStyle.Bold),
+            Font = new Font("Segoe UI", 15f, FontStyle.Bold),
             ForeColor = ThemePalette.Success,
-            Location = new Point(10, 12),
-            AutoSize = true
+            Dock = DockStyle.Top,
+            Height = 34,
+            TextAlign = ContentAlignment.MiddleLeft
         };
+
+        var tlpActions1 = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            Height = 44,
+            ColumnCount = 2,
+            RowCount = 1,
+            Margin = new Padding(0, 4, 0, 4)
+        };
+        tlpActions1.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 55f));
+        tlpActions1.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 45f));
 
         var btnSendToKitchen = new Button
         {
-            Text = "ВІДПРАВИТИ НА КУХНЮ (KDS)",
-            Location = new Point(10, 52),
-            Size = new Size(200, 42),
+            Text = "🚀 НА КУХНЮ",
+            Dock = DockStyle.Fill,
             FlatStyle = FlatStyle.Flat,
             BackColor = ThemePalette.PrimaryDark,
             ForeColor = Color.White,
             Font = ThemePalette.TitleFont,
-            Cursor = Cursors.Hand
+            Cursor = Cursors.Hand,
+            Margin = new Padding(0, 0, 4, 0)
         };
         btnSendToKitchen.FlatAppearance.BorderSize = 0;
         btnSendToKitchen.Click += async (s, e) => await SendOrderToKitchenAsync();
 
         var btnPay = new Button
         {
-            Text = "ОПЛАТИТИ (PAY)",
-            Location = new Point(220, 52),
-            Size = new Size(160, 42),
+            Text = "💳 ОПЛАТИТИ",
+            Dock = DockStyle.Fill,
             FlatStyle = FlatStyle.Flat,
             BackColor = ThemePalette.Success,
             ForeColor = ThemePalette.TextInverse,
             Font = ThemePalette.TitleFont,
-            Cursor = Cursors.Hand
+            Cursor = Cursors.Hand,
+            Margin = new Padding(4, 0, 0, 0)
         };
         btnPay.FlatAppearance.BorderSize = 0;
         btnPay.Click += async (s, e) => await OpenPaymentDialogAsync();
 
+        tlpActions1.Controls.Add(btnSendToKitchen, 0, 0);
+        tlpActions1.Controls.Add(btnPay, 1, 0);
+
+        var tlpActions2 = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            Height = 36,
+            ColumnCount = 2,
+            RowCount = 1,
+            Margin = new Padding(0, 4, 0, 0)
+        };
+        tlpActions2.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 55f));
+        tlpActions2.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 45f));
+
         var btnPrintPrecheck = new Button
         {
-            Text = "Друк пречека",
-            Location = new Point(10, 102),
-            Size = new Size(120, 34),
+            Text = "🖨️ Пречек",
+            Dock = DockStyle.Fill,
             FlatStyle = FlatStyle.Flat,
             BackColor = ThemePalette.BackgroundInput,
             ForeColor = ThemePalette.TextPrimary,
-            Cursor = Cursors.Hand
+            Font = ThemePalette.SmallFont,
+            Cursor = Cursors.Hand,
+            Margin = new Padding(0, 0, 4, 0)
         };
         btnPrintPrecheck.FlatAppearance.BorderColor = ThemePalette.Border;
         btnPrintPrecheck.Click += (s, e) => PrintPrecheck();
 
         var btnClearOrder = new Button
         {
-            Text = "Очистити",
-            Location = new Point(140, 102),
-            Size = new Size(90, 34),
+            Text = "🗑️ Очистити",
+            Dock = DockStyle.Fill,
             FlatStyle = FlatStyle.Flat,
             BackColor = ThemePalette.BackgroundInput,
             ForeColor = ThemePalette.Danger,
-            Cursor = Cursors.Hand
+            Font = ThemePalette.SmallFont,
+            Cursor = Cursors.Hand,
+            Margin = new Padding(4, 0, 0, 0)
         };
         btnClearOrder.FlatAppearance.BorderColor = ThemePalette.Border;
         btnClearOrder.Click += (s, e) => ClearDraft();
 
-        pnlOrderBottom.Controls.AddRange(new Control[] { _lblOrderTotal, btnSendToKitchen, btnPay, btnPrintPrecheck, btnClearOrder });
+        tlpActions2.Controls.Add(btnPrintPrecheck, 0, 0);
+        tlpActions2.Controls.Add(btnClearOrder, 1, 0);
+
+        pnlOrderBottom.Controls.Add(tlpActions2);
+        pnlOrderBottom.Controls.Add(tlpActions1);
+        pnlOrderBottom.Controls.Add(_lblOrderTotal);
 
         pnlOrderRight.Controls.Add(_gridCurrentOrder);
         pnlOrderRight.Controls.Add(pnlOrderBottom);
@@ -258,6 +324,45 @@ public class PosTerminalForm : BaseForm
 
     private async Task InitializeDataAsync(FlowLayoutPanel pnlCategoryFilter)
     {
+        // Populate Zone Tabs
+        var zones = await _posService.GetZonesAsync();
+        _pnlZoneTabs.Controls.Clear();
+
+        var btnAllZones = CreateFilterTabButton("Всі", async () =>
+        {
+            _currentZoneId = null;
+            await LoadTablesAsync();
+        }, isSelected: true);
+        _pnlZoneTabs.Controls.Add(btnAllZones);
+
+        foreach (var z in zones)
+        {
+            int zid = z.Id;
+            string tabName = z.Name.Replace(" зал", "").Replace(" Лаундж", "").Trim();
+            var btnZone = CreateFilterTabButton(tabName, async () =>
+            {
+                _currentZoneId = zid;
+                await LoadTablesAsync();
+            });
+            _pnlZoneTabs.Controls.Add(btnZone);
+        }
+
+        var btnArrange = new Button
+        {
+            Text = "📐 Сітка",
+            Height = 30,
+            AutoSize = true,
+            FlatStyle = FlatStyle.Flat,
+            BackColor = ThemePalette.BackgroundInput,
+            ForeColor = ThemePalette.TextPrimary,
+            Font = ThemePalette.SmallFont,
+            Margin = new Padding(6, 2, 2, 2),
+            Cursor = Cursors.Hand
+        };
+        btnArrange.FlatAppearance.BorderColor = ThemePalette.BorderLight;
+        btnArrange.Click += async (s, e) => await ArrangeTablesInGridAsync();
+        _pnlZoneTabs.Controls.Add(btnArrange);
+
         await LoadTablesAsync();
 
         // Load Categories
@@ -274,6 +379,42 @@ public class PosTerminalForm : BaseForm
         }
 
         await LoadMenuItemsAsync(null);
+    }
+
+    private Button CreateFilterTabButton(string text, Func<Task> onClick, bool isSelected = false)
+    {
+        var btn = new Button
+        {
+            Text = text,
+            Height = 30,
+            AutoSize = true,
+            FlatStyle = FlatStyle.Flat,
+            BackColor = isSelected ? ThemePalette.BackgroundCardHover : ThemePalette.BackgroundCard,
+            ForeColor = isSelected ? ThemePalette.TextPrimary : ThemePalette.TextMuted,
+            Font = ThemePalette.SmallFont,
+            Margin = new Padding(2),
+            Cursor = Cursors.Hand
+        };
+        btn.FlatAppearance.BorderColor = isSelected ? ThemePalette.Primary : ThemePalette.Border;
+
+        btn.Click += async (s, e) =>
+        {
+            foreach (Control c in _pnlZoneTabs.Controls)
+            {
+                if (c is Button b && b.Text != "📐 Вирівняти сіткою")
+                {
+                    b.BackColor = ThemePalette.BackgroundCard;
+                    b.ForeColor = ThemePalette.TextMuted;
+                    b.FlatAppearance.BorderColor = ThemePalette.Border;
+                }
+            }
+            btn.BackColor = ThemePalette.BackgroundCardHover;
+            btn.ForeColor = ThemePalette.TextPrimary;
+            btn.FlatAppearance.BorderColor = ThemePalette.Primary;
+            await onClick();
+        };
+
+        return btn;
     }
 
     private Button CreateCategoryButton(string text, Action onClick)
@@ -298,7 +439,15 @@ public class PosTerminalForm : BaseForm
     private async Task LoadTablesAsync()
     {
         _pnlFloorCanvas.Controls.Clear();
-        var tables = await _posService.GetTablesByZoneAsync();
+        var tables = await _posService.GetTablesByZoneAsync(_currentZoneId);
+
+        // Check if any tables overlap; if so, organize them cleanly
+        bool hasOverlap = CheckIfTablesOverlap(tables);
+        if (hasOverlap)
+        {
+            await ArrangeTablesInGridAsync(tables);
+            return;
+        }
 
         foreach (var table in tables)
         {
@@ -306,6 +455,53 @@ public class PosTerminalForm : BaseForm
             widget.TableClicked += async (s, t) => await SelectTableAsync(t);
             widget.PositionChanged += async (s, req) => await _posService.UpdateTablePositionAsync(req);
             _pnlFloorCanvas.Controls.Add(widget);
+        }
+    }
+
+    private static bool CheckIfTablesOverlap(List<TableDto> tables)
+    {
+        for (int i = 0; i < tables.Count; i++)
+        {
+            for (int j = i + 1; j < tables.Count; j++)
+            {
+                var r1 = new Rectangle(tables[i].PositionX, tables[i].PositionY, tables[i].Width, tables[i].Height);
+                var r2 = new Rectangle(tables[j].PositionX, tables[j].PositionY, tables[j].Width, tables[j].Height);
+                if (r1.IntersectsWith(r2)) return true;
+            }
+        }
+        return false;
+    }
+
+    private async Task ArrangeTablesInGridAsync(List<TableDto>? tablesToArrange = null)
+    {
+        var tables = tablesToArrange ?? await _posService.GetTablesByZoneAsync(_currentZoneId);
+        _pnlFloorCanvas.Controls.Clear();
+
+        int startX = 25;
+        int startY = 20;
+        int tableWidth = 125;
+        int tableHeight = 90;
+        int gapX = 24;
+        int gapY = 24;
+
+        int canvasWidth = Math.Max(500, _pnlFloorCanvas.ClientSize.Width > 0 ? _pnlFloorCanvas.ClientSize.Width : 750);
+        int cols = Math.Max(2, (canvasWidth - 50) / (tableWidth + gapX));
+
+        for (int i = 0; i < tables.Count; i++)
+        {
+            int r = i / cols;
+            int c = i % cols;
+            int newX = startX + c * (tableWidth + gapX);
+            int newY = startY + r * (tableHeight + gapY);
+
+            var updatedDto = tables[i] with { PositionX = newX, PositionY = newY, Width = tableWidth, Height = tableHeight };
+            var widget = new FloorTableWidget(updatedDto);
+            widget.TableClicked += async (s, t) => await SelectTableAsync(t);
+            widget.PositionChanged += async (s, req) => await _posService.UpdateTablePositionAsync(req);
+            _pnlFloorCanvas.Controls.Add(widget);
+
+            // Persist the clean coordinates
+            await _posService.UpdateTablePositionAsync(new UpdateTablePositionRequest(tables[i].Id, newX, newY));
         }
     }
 

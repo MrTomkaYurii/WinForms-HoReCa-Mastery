@@ -38,24 +38,34 @@ public class MainShellForm : BaseForm
 
         Text = "LuxeResto HoReCa Suite — Enterprise POS & Hotel Management (.NET 10)";
         Size = new Size(1300, 800);
-        MinimumSize = new Size(1100, 700);
+        MinimumSize = new Size(1000, 650);
 
-        // Header Panel
+        // Header Panel (Responsive Layout)
         var pnlHeader = new Panel
         {
             Dock = DockStyle.Top,
-            Height = 65,
-            BackColor = ThemePalette.BackgroundSidebar,
-            Padding = new Padding(20, 0, 20, 0)
+            Height = 60,
+            BackColor = ThemePalette.BackgroundHeader,
+            Padding = new Padding(16, 0, 16, 0)
+        };
+
+        var pnlHeaderLeft = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Left,
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            BackColor = Color.Transparent,
+            Padding = new Padding(0, 14, 0, 0)
         };
 
         var lblBrand = new Label
         {
             Text = "LUXERESTO  HoReCa  OS",
-            Font = new Font("Segoe UI", 15f, FontStyle.Bold),
-            ForeColor = ThemePalette.Primary,
-            Location = new Point(20, 18),
-            AutoSize = true
+            Font = new Font("Segoe UI", 13.5f, FontStyle.Bold),
+            ForeColor = ThemePalette.TextPrimary,
+            AutoSize = true,
+            Margin = new Padding(0, 0, 12, 0)
         };
 
         var lblSub = new Label
@@ -63,8 +73,43 @@ public class MainShellForm : BaseForm
             Text = "Enterprise ERP & Touch POS",
             Font = new Font("Segoe UI", 8.5f, FontStyle.Regular),
             ForeColor = ThemePalette.TextMuted,
-            Location = new Point(280, 24),
-            AutoSize = true
+            AutoSize = true,
+            Margin = new Padding(0, 5, 0, 0)
+        };
+
+        pnlHeaderLeft.Controls.AddRange(new Control[] { lblBrand, lblSub });
+
+        var pnlHeaderRight = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Right,
+            AutoSize = true,
+            FlowDirection = FlowDirection.RightToLeft,
+            WrapContents = false,
+            BackColor = Color.Transparent,
+            Padding = new Padding(0, 14, 14, 0)
+        };
+
+        var btnSwitchUser = new Button
+        {
+            Text = "🚪 Зміна акаунта",
+            Size = new Size(135, 32),
+            FlatStyle = FlatStyle.Flat,
+            BackColor = ThemePalette.BackgroundCard,
+            ForeColor = ThemePalette.TextPrimary,
+            Font = ThemePalette.SmallFont,
+            Cursor = Cursors.Hand,
+            Margin = new Padding(8, 0, 0, 0)
+        };
+        btnSwitchUser.FlatAppearance.BorderColor = ThemePalette.Border;
+        btnSwitchUser.Click += (s, e) => _navStart.PerformClick();
+
+        _lblClock = new Label
+        {
+            Text = DateTime.Now.ToString("dd.MM.yyyy  HH:mm:ss"),
+            Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+            ForeColor = ThemePalette.TextPrimary,
+            AutoSize = true,
+            Margin = new Padding(16, 6, 0, 0)
         };
 
         _lblUserBadge = new Label
@@ -72,41 +117,18 @@ public class MainShellForm : BaseForm
             Text = "👤 Оберіть акаунт на стартовій",
             Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
             ForeColor = ThemePalette.Warning,
-            Location = new Point(Width - 580, 22),
-            Anchor = AnchorStyles.Top | AnchorStyles.Right,
-            AutoSize = true
+            AutoSize = true,
+            Margin = new Padding(12, 6, 0, 0)
         };
-
-        _lblClock = new Label
-        {
-            Text = DateTime.Now.ToString("dd.MM.yyyy  HH:mm:ss"),
-            Font = new Font("Segoe UI", 10.5f, FontStyle.Bold),
-            ForeColor = ThemePalette.TextPrimary,
-            Location = new Point(Width - 270, 22),
-            Anchor = AnchorStyles.Top | AnchorStyles.Right,
-            AutoSize = true
-        };
-
-        var btnSwitchUser = new Button
-        {
-            Text = "🚪 Змінити акаунт",
-            Location = new Point(Width - 110, 16),
-            Size = new Size(95, 32),
-            Anchor = AnchorStyles.Top | AnchorStyles.Right,
-            FlatStyle = FlatStyle.Flat,
-            BackColor = ThemePalette.BackgroundCard,
-            ForeColor = ThemePalette.Primary,
-            Font = ThemePalette.SmallFont,
-            Cursor = Cursors.Hand
-        };
-        btnSwitchUser.FlatAppearance.BorderColor = ThemePalette.Border;
-        btnSwitchUser.Click += (s, e) => _navStart.PerformClick();
 
         var clockTimer = new System.Windows.Forms.Timer { Interval = 1000 };
         clockTimer.Tick += (s, e) => _lblClock.Text = DateTime.Now.ToString("dd.MM.yyyy  HH:mm:ss");
         clockTimer.Start();
 
-        pnlHeader.Controls.AddRange(new Control[] { lblBrand, lblSub, _lblUserBadge, _lblClock, btnSwitchUser });
+        pnlHeaderRight.Controls.AddRange(new Control[] { btnSwitchUser, _lblClock, _lblUserBadge });
+
+        pnlHeader.Controls.Add(pnlHeaderRight);
+        pnlHeader.Controls.Add(pnlHeaderLeft);
 
         // Left Sidebar Navigation
         var pnlSidebar = new Panel

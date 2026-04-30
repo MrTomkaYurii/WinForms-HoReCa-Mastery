@@ -123,19 +123,26 @@ public class FloorTableWidget : UserControl
 
         // Fill background
         using var tablePath = GetTablePath(rect, _table.Shape);
-        using var bgBrush = new SolidBrush(_isHovered ? Color.FromArgb(42, 53, 78) : ThemePalette.BackgroundCard);
+        using var bgBrush = new SolidBrush(_isHovered ? ThemePalette.BackgroundCardHover : ThemePalette.BackgroundCard);
         g.FillPath(bgBrush, tablePath);
 
         // Draw border
-        using var borderPen = new Pen(_isHovered ? ThemePalette.Primary : statusColor, 2f);
+        using var borderPen = new Pen(_isHovered ? ThemePalette.Primary : statusColor, _isHovered ? 2.5f : 1.8f);
         g.DrawPath(borderPen, tablePath);
 
         // Table Number Header
         string title = $"№ {_table.TableNumber}";
-        using var fontTitle = new Font("Segoe UI", 11f, FontStyle.Bold);
+        using var fontTitle = new Font("Segoe UI", 11.5f, FontStyle.Bold);
         using var textBrush = new SolidBrush(ThemePalette.TextPrimary);
         var sizeTitle = g.MeasureString(title, fontTitle);
         g.DrawString(title, fontTitle, textBrush, (Width - sizeTitle.Width) / 2, 8);
+
+        // Zone Name Tag
+        string zoneStr = _table.ZoneName;
+        using var fontZone = new Font("Segoe UI", 7.5f, FontStyle.Regular);
+        using var zoneBrush = new SolidBrush(ThemePalette.TextMuted);
+        var sizeZone = g.MeasureString(zoneStr, fontZone);
+        g.DrawString(zoneStr, fontZone, zoneBrush, (Width - sizeZone.Width) / 2, 28);
 
         // Capacity and Status subtitle
         string subtitle = $"{_table.Capacity} місць";
@@ -144,14 +151,14 @@ public class FloorTableWidget : UserControl
             subtitle = $"{_table.ActiveOrderTotal:F0} ₴";
         }
 
-        using var fontSub = new Font("Segoe UI", 8.5f, FontStyle.Regular);
-        using var subBrush = new SolidBrush(_table.Status == TableStatus.Occupied ? ThemePalette.Warning : ThemePalette.TextMuted);
+        using var fontSub = new Font("Segoe UI", 8.5f, FontStyle.Bold);
+        using var subBrush = new SolidBrush(_table.Status == TableStatus.Occupied ? ThemePalette.Warning : (_table.Status == TableStatus.Free ? ThemePalette.Success : ThemePalette.TextMuted));
         var sizeSub = g.MeasureString(subtitle, fontSub);
         g.DrawString(subtitle, fontSub, subBrush, (Width - sizeSub.Width) / 2, Height - 22);
 
         // Status indicator dot
         using var dotBrush = new SolidBrush(statusColor);
-        g.FillEllipse(dotBrush, Width - 14, 6, 8, 8);
+        g.FillEllipse(dotBrush, Width - 16, 8, 8, 8);
     }
 
     private static GraphicsPath GetTablePath(Rectangle bounds, TableShape shape)

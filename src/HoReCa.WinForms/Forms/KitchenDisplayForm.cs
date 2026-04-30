@@ -21,9 +21,9 @@ public class KitchenDisplayForm : BaseForm
         var pnlHeader = new Panel
         {
             Dock = DockStyle.Top,
-            Height = 55,
+            Height = 56,
             BackColor = ThemePalette.BackgroundSidebar,
-            Padding = new Padding(14)
+            Padding = new Padding(16, 10, 16, 10)
         };
 
         var lblTitle = new Label
@@ -31,16 +31,24 @@ public class KitchenDisplayForm : BaseForm
             Text = "KDS — KITCHEN DISPLAY SYSTEM (КУХОННИЙ ТЕРМІНАЛ КУХАРЯ)",
             Font = ThemePalette.TitleFont,
             ForeColor = ThemePalette.Primary,
-            Location = new Point(14, 16),
+            Dock = DockStyle.Left,
+            TextAlign = ContentAlignment.MiddleLeft,
             AutoSize = true
+        };
+
+        var flpActions = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Right,
+            FlowDirection = FlowDirection.RightToLeft,
+            AutoSize = true,
+            WrapContents = false,
+            BackColor = Color.Transparent
         };
 
         var btnRefresh = new Button
         {
-            Text = "🔄 Оновити зараз",
-            Location = new Point(Width - 180, 10),
-            Anchor = AnchorStyles.Top | AnchorStyles.Right,
-            Size = new Size(130, 36),
+            Text = "🔄 Оновити",
+            Size = new Size(120, 36),
             FlatStyle = FlatStyle.Flat,
             BackColor = ThemePalette.BackgroundInput,
             ForeColor = ThemePalette.TextPrimary,
@@ -49,7 +57,10 @@ public class KitchenDisplayForm : BaseForm
         btnRefresh.FlatAppearance.BorderColor = ThemePalette.Border;
         btnRefresh.Click += async (s, e) => await LoadKitchenOrdersAsync();
 
-        pnlHeader.Controls.AddRange(new Control[] { lblTitle, btnRefresh });
+        flpActions.Controls.Add(btnRefresh);
+
+        pnlHeader.Controls.Add(flpActions);
+        pnlHeader.Controls.Add(lblTitle);
 
         _pnlTickets = new FlowLayoutPanel
         {

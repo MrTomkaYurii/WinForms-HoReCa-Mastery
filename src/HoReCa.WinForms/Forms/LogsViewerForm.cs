@@ -14,9 +14,9 @@ public class LogsViewerForm : BaseForm
         var pnlHeader = new Panel
         {
             Dock = DockStyle.Top,
-            Height = 55,
+            Height = 56,
             BackColor = ThemePalette.BackgroundSidebar,
-            Padding = new Padding(12)
+            Padding = new Padding(16, 10, 16, 10)
         };
 
         var lblTitle = new Label
@@ -24,16 +24,24 @@ public class LogsViewerForm : BaseForm
             Text = "СИСТЕМНИЙ ЖУРНАЛ ПОДІЙ & ДІАГНОСТИКА (SERILOG REAL-TIME SINK)",
             Font = ThemePalette.TitleFont,
             ForeColor = ThemePalette.Primary,
-            Location = new Point(14, 16),
+            Dock = DockStyle.Left,
+            TextAlign = ContentAlignment.MiddleLeft,
             AutoSize = true
+        };
+
+        var flpActions = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Right,
+            FlowDirection = FlowDirection.RightToLeft,
+            AutoSize = true,
+            WrapContents = false,
+            BackColor = Color.Transparent
         };
 
         var btnClear = new Button
         {
             Text = "🗑️ Очистити лог",
-            Location = new Point(Width - 170, 10),
-            Anchor = AnchorStyles.Top | AnchorStyles.Right,
-            Size = new Size(130, 36),
+            Size = new Size(150, 36),
             FlatStyle = FlatStyle.Flat,
             BackColor = ThemePalette.BackgroundInput,
             ForeColor = ThemePalette.TextPrimary,
@@ -42,17 +50,20 @@ public class LogsViewerForm : BaseForm
         btnClear.FlatAppearance.BorderColor = ThemePalette.Border;
         btnClear.Click += (s, e) => _rtbLogs.Clear();
 
-        pnlHeader.Controls.AddRange(new Control[] { lblTitle, btnClear });
+        flpActions.Controls.Add(btnClear);
+
+        pnlHeader.Controls.Add(flpActions);
+        pnlHeader.Controls.Add(lblTitle);
 
         _rtbLogs = new RichTextBox
         {
             Dock = DockStyle.Fill,
-            BackColor = Color.FromArgb(10, 14, 23),
-            ForeColor = Color.WhiteSmoke,
+            BackColor = ThemePalette.BackgroundDark,
+            ForeColor = ThemePalette.TextPrimary,
             Font = ThemePalette.MonospaceFont,
             ReadOnly = true,
             BorderStyle = BorderStyle.None,
-            Padding = new Padding(10)
+            Padding = new Padding(12)
         };
 
         Controls.Add(_rtbLogs);

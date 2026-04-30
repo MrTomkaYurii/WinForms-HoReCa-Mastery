@@ -126,7 +126,7 @@ public class RoomRackControl : UserControl
             var room = _rooms[r];
 
             // Row background alternate
-            using var rowBgBrush = new SolidBrush(r % 2 == 0 ? ThemePalette.BackgroundDark : Color.FromArgb(23, 30, 47));
+            using var rowBgBrush = new SolidBrush(r % 2 == 0 ? ThemePalette.BackgroundDark : ThemePalette.BackgroundCard);
             g.FillRectangle(rowBgBrush, 0, y, totalWidth, RowHeight);
             g.DrawLine(borderPen, 0, y, totalWidth, y);
 
@@ -170,7 +170,7 @@ public class RoomRackControl : UserControl
             var blockRect = new Rectangle(x, y, width, h);
             using var blockPath = CreateRoundedRectangle(blockRect, 6);
             
-            Color blockColor = b.IsCheckedIn ? ThemePalette.PrimaryDark : Color.FromArgb(79, 70, 229);
+            Color blockColor = b.IsCheckedIn ? Color.FromArgb(50, 65, 85) : Color.FromArgb(38, 46, 58);
             using var blockBrush = new SolidBrush(blockColor);
             g.FillPath(blockBrush, blockPath);
 

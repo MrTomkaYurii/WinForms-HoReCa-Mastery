@@ -71,7 +71,7 @@ public class CashierNumpadControl : UserControl
             FlatStyle = FlatStyle.Flat,
             Font = new Font("Segoe UI", isSpecial || isQuickBill ? 9.5f : 12f, FontStyle.Bold),
             ForeColor = isSpecial ? ThemePalette.Warning : (isQuickBill ? ThemePalette.Success : ThemePalette.TextPrimary),
-            BackColor = isSpecial ? Color.FromArgb(45, 55, 75) : ThemePalette.BackgroundInput,
+            BackColor = isSpecial ? Color.FromArgb(36, 40, 48) : ThemePalette.BackgroundInput,
             Margin = new Padding(3),
             Cursor = Cursors.Hand
         };
