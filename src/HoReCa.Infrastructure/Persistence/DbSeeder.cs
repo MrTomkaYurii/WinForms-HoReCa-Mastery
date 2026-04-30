@@ -1,5 +1,6 @@
 using HoReCa.Domain.Entities;
 using HoReCa.Domain.Enums;
+using HoReCa.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace HoReCa.Infrastructure.Persistence;
@@ -9,6 +10,62 @@ public static class DbSeeder
     public static async Task SeedAsync(HoReCaDbContext context)
     {
         await context.Database.EnsureCreatedAsync();
+
+        // Ensure default users are seeded
+        if (!await context.Users.AnyAsync())
+        {
+            var defaultUsers = new List<UserAccount>
+            {
+                new()
+                {
+                    Username = "admin",
+                    FullName = "Олександр Коваленко (Керуючий / Admin)",
+                    PasswordHash = PasswordHelper.HashPassword("admin123"),
+                    PinCode = "1111",
+                    Role = UserRole.Administrator,
+                    IsActive = true
+                },
+                new()
+                {
+                    Username = "waiter",
+                    FullName = "Максим Іванов (Офіціант ресторану)",
+                    PasswordHash = PasswordHelper.HashPassword("waiter123"),
+                    PinCode = "2222",
+                    Role = UserRole.Waiter,
+                    IsActive = true
+                },
+                new()
+                {
+                    Username = "reception",
+                    FullName = "Ірина Мельник (Адміністратор рецепції)",
+                    PasswordHash = PasswordHelper.HashPassword("hotel123"),
+                    PinCode = "3333",
+                    Role = UserRole.Receptionist,
+                    IsActive = true
+                },
+                new()
+                {
+                    Username = "chef",
+                    FullName = "Тарас Шевченко (Шеф-кухар)",
+                    PasswordHash = PasswordHelper.HashPassword("chef123"),
+                    PinCode = "4444",
+                    Role = UserRole.Chef,
+                    IsActive = true
+                },
+                new()
+                {
+                    Username = "store",
+                    FullName = "Василь Бондар (Менеджер складу)",
+                    PasswordHash = PasswordHelper.HashPassword("store123"),
+                    PinCode = "5555",
+                    Role = UserRole.Storekeeper,
+                    IsActive = true
+                }
+            };
+
+            context.Users.AddRange(defaultUsers);
+            await context.SaveChangesAsync();
+        }
 
         if (await context.TableZones.AnyAsync())
         {

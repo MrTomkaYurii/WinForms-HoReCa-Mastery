@@ -1,6 +1,7 @@
 using System.Drawing;
 using System.Windows.Forms;
 using HoReCa.Application.Interfaces;
+using HoReCa.Domain.Enums;
 using HoReCa.WinForms.Common;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -9,19 +10,25 @@ namespace HoReCa.WinForms.Forms;
 public class MainShellForm : BaseForm
 {
     private readonly IServiceProvider _serviceProvider;
+    private readonly IAuthService _authService;
     private readonly Panel _pnlContent;
     private readonly Label _lblClock;
     private readonly ToolStripStatusLabel _lblDbStatus;
     private readonly ToolStripStatusLabel _lblActiveOrders;
+    private readonly ToolStripStatusLabel _lblCurrentUser;
     private Button? _activeNavButton;
 
-    public MainShellForm(IServiceProvider serviceProvider)
+    public MainShellForm(IServiceProvider serviceProvider, IAuthService authService)
     {
         _serviceProvider = serviceProvider;
+        _authService = authService;
 
         Text = "LuxeResto HoReCa Suite — Enterprise POS & Hotel Management (.NET 10)";
         Size = new Size(1300, 800);
         MinimumSize = new Size(1100, 700);
+
+        var currentUser = _authService.CurrentUser;
+        var roleBadge = currentUser != null ? $"{currentUser.FullName}  •  {currentUser.Role}" : "Демо Користувач";
 
         // Header Panel
         var pnlHeader = new Panel
@@ -50,21 +57,51 @@ public class MainShellForm : BaseForm
             AutoSize = true
         };
 
+        var lblUserBadge = new Label
+        {
+            Text = $"👤 {roleBadge}",
+            Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+            ForeColor = ThemePalette.Success,
+            Location = new Point(Width - 580, 22),
+            Anchor = AnchorStyles.Top | AnchorStyles.Right,
+            AutoSize = true
+        };
+
         _lblClock = new Label
         {
             Text = DateTime.Now.ToString("dd.MM.yyyy  HH:mm:ss"),
-            Font = new Font("Segoe UI", 11f, FontStyle.Bold),
+            Font = new Font("Segoe UI", 10.5f, FontStyle.Bold),
             ForeColor = ThemePalette.TextPrimary,
-            Location = new Point(Width - 320, 20),
+            Location = new Point(Width - 270, 22),
             Anchor = AnchorStyles.Top | AnchorStyles.Right,
             AutoSize = true
+        };
+
+        var btnLogout = new Button
+        {
+            Text = "🚪 Змінити акаунт",
+            Location = new Point(Width - 110, 16),
+            Size = new Size(95, 32),
+            Anchor = AnchorStyles.Top | AnchorStyles.Right,
+            FlatStyle = FlatStyle.Flat,
+            BackColor = ThemePalette.BackgroundCard,
+            ForeColor = ThemePalette.Danger,
+            Font = ThemePalette.SmallFont,
+            Cursor = Cursors.Hand
+        };
+        btnLogout.FlatAppearance.BorderColor = ThemePalette.Border;
+        btnLogout.Click += (s, e) =>
+        {
+            _authService.Logout();
+            DialogResult = DialogResult.Retry; // Signals to Program loop to re-show login
+            Close();
         };
 
         var clockTimer = new System.Windows.Forms.Timer { Interval = 1000 };
         clockTimer.Tick += (s, e) => _lblClock.Text = DateTime.Now.ToString("dd.MM.yyyy  HH:mm:ss");
         clockTimer.Start();
 
-        pnlHeader.Controls.AddRange(new Control[] { lblBrand, lblSub, _lblClock });
+        pnlHeader.Controls.AddRange(new Control[] { lblBrand, lblSub, lblUserBadge, _lblClock, btnLogout });
 
         // Left Sidebar Navigation
         var pnlSidebar = new Panel
@@ -98,10 +135,11 @@ public class MainShellForm : BaseForm
         };
 
         _lblDbStatus = new ToolStripStatusLabel("🟢 База даних: Підключено (PostgreSQL / SQLite)") { ForeColor = ThemePalette.Success };
+        _lblCurrentUser = new ToolStripStatusLabel($"  |  Користувач: {currentUser?.Username ?? "demo"} ({currentUser?.Role})") { ForeColor = ThemePalette.Primary };
         _lblActiveOrders = new ToolStripStatusLabel("  |  Замовлень у роботі: Активно") { ForeColor = ThemePalette.TextPrimary };
         var lblVersion = new ToolStripStatusLabel("  |  v1.0.0-net10.0-LTS  |  WinForms Mastery Suite") { Alignment = ToolStripItemAlignment.Right };
 
-        statusStrip.Items.AddRange(new ToolStripItem[] { _lblDbStatus, _lblActiveOrders, lblVersion });
+        statusStrip.Items.AddRange(new ToolStripItem[] { _lblDbStatus, _lblCurrentUser, _lblActiveOrders, lblVersion });
 
         // Main Content Area
         _pnlContent = new Panel
@@ -115,8 +153,33 @@ public class MainShellForm : BaseForm
         Controls.Add(pnlHeader);
         Controls.Add(statusStrip);
 
-        // Default view
-        navPos.PerformClick();
+        // Role-based initial view
+        if (currentUser != null)
+        {
+            switch (currentUser.Role)
+            {
+                case UserRole.Receptionist:
+                    navHotel.PerformClick();
+                    break;
+                case UserRole.Chef:
+                    navKds.PerformClick();
+                    break;
+                case UserRole.Storekeeper:
+                    navInventory.PerformClick();
+                    break;
+                case UserRole.Administrator:
+                    navAnalytics.PerformClick();
+                    break;
+                case UserRole.Waiter:
+                default:
+                    navPos.PerformClick();
+                    break;
+            }
+        }
+        else
+        {
+            navPos.PerformClick();
+        }
     }
 
     private Button CreateNavButton(string text, Action onClick)

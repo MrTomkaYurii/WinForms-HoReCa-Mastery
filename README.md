@@ -186,6 +186,17 @@ erDiagram
         decimal cost_per_unit
     }
 
+    USER_ACCOUNT {
+        int id PK
+        string username
+        string full_name
+        string password_hash
+        string pin_code
+        int role
+        bool is_active
+        datetime last_login_at
+    }
+
     PAYMENT {
         int id PK
         int order_id FK
@@ -197,6 +208,27 @@ erDiagram
         datetime created_at
     }
 ```
+
+---
+
+## Demo Accounts & Rapid Testing
+
+The application features a modern **Start Page & Login Dialog** (`LoginForm`) with **1-click quick login cards** for instant evaluation across 5 business roles:
+
+| Role | Username | Default Password | Quick 4-Digit PIN | Access Scope & Responsibilities |
+| :--- | :--- | :--- | :--- | :--- |
+| **Адміністратор (Admin)** | `admin` | `admin123` | `1111` | Повний доступ до всіх модулів, BI-аналітика ScottPlot, аудит-журнали Serilog. |
+| **Офіціант (Waiter)** | `waiter` | `waiter123` | `2222` | Інтерактивна карта залів, створення замовлень, touch-нумпад, закриття чеків. |
+| **Рецепція (Receptionist)** | `reception` | `hotel123` | `3333` | Стійка реєстрації, 2D календарна шахівниця (Room Rack), поселення гостей. |
+| **Шеф-кухар (Chef)** | `chef` | `chef123` | `4444` | Кухонний монітор (KDS), таймери приготування, аудіо-оповіщення страв. |
+| **Менеджер складу (Store)** | `store` | `store123` | `5555` | Баланси залишків, контроль дефіциту, оприбуткування через модальне вікно. |
+
+### Employee Registration
+Users can also switch to the **"Реєстрація"** tab to create custom employee accounts. The registration workflow uses:
+- FluentValidation validation (`RegisterUserRequestValidator`) enforcing 4-digit PIN masks and minimum length rules.
+- SHA-256 salted password hashing (`PasswordHelper`).
+- Direct database persistence in PostgreSQL or SQLite.
+
 
 ---
 
@@ -219,6 +251,7 @@ Every core Windows Forms component is utilized in a realistic, production-ready 
 | `ErrorProvider` | Modal Dialogs | Non-blinking validation error alerts integrated with FluentValidation. |
 | `MaskedTextBox` | New Booking Dialog | Structured input mask for Ukrainian phone numbers (`+38 (000) 000-00-00`). |
 | `DateTimePicker` | Front Desk & Reservations | Date selection constrained to future dates with cross-field range validation. |
+| `LoginForm` | Start Page & Authentication | 1-click role switcher cards, PIN-based rapid login, user registration workflow. |
 | `PrintDocument` | Fiscal Subsystem | GDI+ 80mm thermal receipt rendering, page layout, and fiscal text generation. |
 | `PrintPreviewDialog` | Payment Dialog | Preview thermal receipts before sending to physical hardware. |
 | `RichTextBox` | Real-Time Diagnostics | Thread-safe Serilog sink target with ANSI LogLevel color-coding. |

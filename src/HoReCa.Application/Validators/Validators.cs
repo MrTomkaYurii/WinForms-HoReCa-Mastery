@@ -47,3 +47,26 @@ public class CreateOrderRequestValidator : AbstractValidator<CreateOrderRequest>
         });
     }
 }
+
+public class RegisterUserRequestValidator : AbstractValidator<RegisterUserRequest>
+{
+    public RegisterUserRequestValidator()
+    {
+        RuleFor(x => x.Username)
+            .NotEmpty().WithMessage("Логін є обов'язковим.")
+            .MinimumLength(3).WithMessage("Логін має містити щонайменше 3 символи.");
+
+        RuleFor(x => x.FullName)
+            .NotEmpty().WithMessage("ПІБ є обов'язковим.")
+            .MinimumLength(3).WithMessage("ПІБ має містити щонайменше 3 символи.");
+
+        RuleFor(x => x.Password)
+            .NotEmpty().WithMessage("Пароль є обов'язковим.")
+            .MinimumLength(4).WithMessage("Пароль має містити щонайменше 4 символи.");
+
+        RuleFor(x => x.PinCode)
+            .NotEmpty().WithMessage("PIN-код є обов'язковим.")
+            .Matches(@"^\d{4}$").WithMessage("PIN-код має складатися рівно з 4 цифр.");
+    }
+}
+

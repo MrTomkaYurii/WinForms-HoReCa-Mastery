@@ -144,3 +144,32 @@ public record TopSellingItemDto(
     int QuantitySold,
     decimal TotalRevenue
 );
+
+public record UserAccountDto(
+    int Id,
+    string Username,
+    string FullName,
+    string PinCode,
+    UserRole Role,
+    bool IsActive
+);
+
+public record LoginRequest(
+    string UsernameOrPin,
+    string? Password
+);
+
+public record RegisterUserRequest(
+    string Username,
+    string FullName,
+    string Password,
+    string PinCode,
+    UserRole Role
+);
+
+public record AuthResult(
+    bool Success,
+    string? ErrorMessage,
+    UserAccountDto? User
+);
+

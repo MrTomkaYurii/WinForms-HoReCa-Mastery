@@ -16,6 +16,7 @@ public class HoReCaDbContext : DbContext
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
     public DbSet<InventoryItem> Inventory => Set<InventoryItem>();
     public DbSet<Payment> Payments => Set<Payment>();
+    public DbSet<UserAccount> Users => Set<UserAccount>();
 
     public HoReCaDbContext(DbContextOptions<HoReCaDbContext> options) : base(options)
     {
@@ -24,6 +25,17 @@ public class HoReCaDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        // UserAccount
+        modelBuilder.Entity<UserAccount>(b =>
+        {
+            b.HasKey(u => u.Id);
+            b.Property(u => u.Username).HasMaxLength(50).IsRequired();
+            b.Property(u => u.FullName).HasMaxLength(150).IsRequired();
+            b.Property(u => u.PasswordHash).HasMaxLength(128).IsRequired();
+            b.Property(u => u.PinCode).HasMaxLength(10).IsRequired();
+            b.HasIndex(u => u.Username).IsUnique();
+        });
 
         // Guest
         modelBuilder.Entity<Guest>(b =>

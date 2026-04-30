@@ -48,3 +48,14 @@ public interface IReceiptPrintService
     string GenerateTextReceipt(OrderDto order, string businessName, string cashierName);
     void PrintReceipt(OrderDto order, string businessName, string cashierName, bool previewOnly = true);
 }
+
+public interface IAuthService
+{
+    UserAccountDto? CurrentUser { get; }
+    Task<AuthResult> LoginAsync(string usernameOrPin, string? password, CancellationToken ct = default);
+    Task<AuthResult> QuickLoginAsync(UserRole role, CancellationToken ct = default);
+    Task<AuthResult> RegisterAsync(RegisterUserRequest request, CancellationToken ct = default);
+    Task<List<UserAccountDto>> GetDemoAccountsAsync(CancellationToken ct = default);
+    void Logout();
+}
+

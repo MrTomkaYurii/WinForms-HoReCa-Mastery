@@ -16,12 +16,12 @@ namespace HoReCa.WinForms;
 static class Program
 {
     [STAThread]
-    static void Main()
+    static void Main(string[] args)
     {
         ApplicationConfiguration.Initialize();
 
         // Build Generic Host
-        var host = Host.CreateDefaultBuilder()
+        var host = Host.CreateDefaultBuilder(args)
             .ConfigureAppConfiguration((context, config) =>
             {
                 config.AddJsonFile("appsettings.json", optional: true, reloadOnChange: true);
@@ -41,7 +41,6 @@ static class Program
                 // Register DbContextFactory with SQLite or PostgreSQL support
                 services.AddDbContextFactory<HoReCaDbContext>(options =>
                 {
-                    // By default in dev/offline mode use SQLite for instant execution, or PostgreSQL if configured
                     if (!string.IsNullOrWhiteSpace(connectionString) && connectionString.Contains("Host="))
                     {
                         try
@@ -60,6 +59,7 @@ static class Program
                 });
 
                 // Business & Printing Services
+                services.AddSingleton<IAuthService, AuthService>();
                 services.AddScoped<ITablePosService, TablePosService>();
                 services.AddScoped<IRoomBookingService, RoomBookingService>();
                 services.AddScoped<IKitchenService, KitchenService>();
@@ -68,6 +68,7 @@ static class Program
                 services.AddSingleton<IReceiptPrintService, ReceiptPrinterEngine>();
 
                 // Forms
+                services.AddTransient<LoginForm>();
                 services.AddTransient<MainShellForm>();
                 services.AddTransient<PosTerminalForm>();
                 services.AddTransient<HotelFrontDeskForm>();
@@ -88,7 +89,30 @@ static class Program
 
         Log.Information("LuxeResto HoReCa Suite successfully started on .NET 10!");
 
-        var mainForm = host.Services.GetRequiredService<MainShellForm>();
-        System.Windows.Forms.Application.Run(mainForm);
+        if (args.Contains("--test-run"))
+        {
+            Log.Information("Test run completed successfully.");
+            return;
+        }
+
+        while (true)
+        {
+            using var scope = host.Services.CreateScope();
+            var loginForm = scope.ServiceProvider.GetRequiredService<LoginForm>();
+
+            var loginResult = loginForm.ShowDialog();
+            if (loginResult != DialogResult.OK)
+            {
+                break; // Exit application
+            }
+
+            var mainForm = scope.ServiceProvider.GetRequiredService<MainShellForm>();
+            System.Windows.Forms.Application.Run(mainForm);
+
+            if (mainForm.DialogResult != DialogResult.Retry)
+            {
+                break; // Normal close
+            }
+        }
     }
 }

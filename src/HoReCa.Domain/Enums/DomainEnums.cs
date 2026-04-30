@@ -57,3 +57,13 @@ public enum PaymentStatus
     Completed = 2,
     Refunded = 3
 }
+
+public enum UserRole
+{
+    Administrator = 1,
+    Waiter = 2,
+    Receptionist = 3,
+    Chef = 4,
+    Storekeeper = 5
+}
+
